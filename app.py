@@ -100,7 +100,7 @@ def generate_case(client: Groq) -> dict:
     for attempt in range(3):  # retry up to 3 times if JSON is malformed
         try:
             response = client.chat.completions.create(
-                model="llama3-70b-8192",
+                model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": CASE_GENERATION_PROMPT},
                     {"role": "user", "content": "Generate a new murder mystery case."}
@@ -132,7 +132,7 @@ def interrogate_suspect(client: Groq, suspect_index: int, question: str) -> str:
 
     try:
         response = client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             messages=messages,
             temperature=0.8,
             max_tokens=300,
