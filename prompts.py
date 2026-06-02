@@ -24,8 +24,7 @@ Return ONLY valid JSON with this exact structure, no markdown, no explanation:
       "alibi": "string — references a real Singapore location or activity (e.g. 'at the 24-hour McDonald's in Clementi', 'watching football at a coffeeshop in Geylang', 'queuing for char kway teow at Old Airport Road')",
       "alibi_contradiction": "string — the hidden flaw in their alibi (only for killer, leave empty string for innocents)",
       "what_they_know": "string — what they genuinely know about the case",
-      "what_they_are_hiding": "string — their secret (not the murder)",
-      "suggested_questions": ["string", "string", "string"]
+      "what_they_are_hiding": "string — their secret (not the murder)"
     }
   ],
   "motive": "string — the killer's motive",
@@ -36,10 +35,32 @@ Rules:
 - Always generate exactly 3 suspects
 - killer_index is 0, 1, or 2
 - Only the killer's alibi_contradiction should be non-empty
-- Each suspect gets 3 suggested questions the player could ask
 - Use Singaporean cultural context: hawker food, HDB life, NS references, local festivals, MRT lines, etc.
 - Suspects may use occasional Singlish words naturally (lah, leh, lor, can or not, etc.) but don't overdo it
 - Make the mystery solvable but not obvious
+"""
+
+# ── Dynamic suggested questions ──────────────────────────────────────────────
+# Generated at runtime based only on what the player currently knows.
+
+SUGGESTED_QUESTIONS_PROMPT = """
+You are helping a player interrogate a suspect in a murder mystery game.
+Suggest 3 short, natural questions the player could ask this suspect RIGHT NOW.
+
+The questions must be based ONLY on:
+- The publicly known facts about the case (victim, setting, cause of death)
+- The suspect's name, relationship to victim, and stated alibi
+- Any clues the player has already collected (listed below)
+- What has already been said in this conversation
+
+Do NOT hint at hidden secrets, motives, alibi flaws, or any information the player
+has not yet discovered. Questions should feel like natural detective follow-ups,
+not spoilers.
+
+Return ONLY valid JSON:
+{
+  "questions": ["string", "string", "string"]
+}
 """
 
 # ── Clue extraction ──────────────────────────────────────────────────────────

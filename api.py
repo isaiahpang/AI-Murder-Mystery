@@ -119,3 +119,52 @@ Transcripts so far:
         return safe_parse_json(result.choices[0].message.content)
     except Exception:
         return None
+
+def get_suggested_questions(client: Groq, suspect_index: int) -> list[str]:
+    """Generate 3 suggested questions based only on what the player currently knows."""
+    from prompts import SUGGESTED_QUESTIONS_PROMPT
+    case = st.session_state.case
+    suspect = case["suspects"][suspect_index]
+    clues = st.session_state.get("clues", [])
+    history = st.session_state.histories[suspect_index]
+
+    # Build a summary of only what the player knows
+    known_clues = "\n".join(f"- {c['text']}" for c in clues) or "None yet."
+    conversation_so_far = "\n".join(
+        f"{'Player' if m['role'] == 'user' else suspect['name']}: {m['content']}"
+        for m in history
+    ) or "No questions asked yet."
+
+    user_content = f"""
+Case facts the player knows:
+- Victim: {case['victim']['name']} ({case['victim']['description']})
+- Location: {case['setting']}
+- Cause of death: {case['cause_of_death']}
+- Opening clue: {case.get('opening_clue', '')}
+
+Suspect being interrogated:
+- Name: {suspect['name']}
+- Relationship to victim: {suspect['relationship_to_victim']}
+- Stated alibi: {suspect['alibi']}
+
+Clues collected so far:
+{known_clues}
+
+Conversation with this suspect so far:
+{conversation_so_far}
+"""
+
+    try:
+        result = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": SUGGESTED_QUESTIONS_PROMPT},
+                {"role": "user", "content": user_content}
+            ],
+            temperature=0.7,
+            max_tokens=200,
+        )
+        parsed = safe_parse_json(result.choices[0].message.content)
+        return parsed.get("questions", []) if parsed else []
+    except Exception:
+        return []
