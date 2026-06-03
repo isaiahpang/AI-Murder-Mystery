@@ -1,52 +1,42 @@
 import streamlit as st
-from config import MAX_TURNS, AI_WRONG_GUESS_TURN
+from config import get_difficulty
 
 def show_briefing():
     """Render the case briefing screen with newspaper dark theme."""
     case = st.session_state.case
+    diff_name = st.session_state.get("difficulty", "Medium")
+    diff = get_difficulty(diff_name)
 
     _, col, _ = st.columns([1, 6, 1])
     with col:
-        # Newspaper-style header
+        # Newspaper header
         st.markdown(
             f"""
-            <div style='
-                border:2px solid #c8a84b;
-                border-radius:4px;
-                padding:24px 32px;
-                margin-bottom:24px;
-                background:#111;
-            '>
-                <div style='
-                    text-align:center;
-                    font-size:0.75em;
-                    letter-spacing:4px;
-                    color:#c8a84b;
-                    text-transform:uppercase;
-                    margin-bottom:8px;
-                '>Singapore Criminal Investigation Department</div>
-                <div style='
-                    text-align:center;
-                    font-size:2em;
-                    font-weight:900;
-                    color:#f0e6cc;
-                    letter-spacing:2px;
-                    line-height:1.2;
-                    font-family:Georgia,serif;
-                '>{case["title"]}</div>
-                <div style='
-                    text-align:center;
-                    font-size:0.85em;
-                    color:#999;
-                    margin-top:8px;
-                    letter-spacing:1px;
-                '>📍 {case["setting"]}</div>
+            <div style='border:2px solid #c8a84b;border-radius:4px;
+                padding:24px 32px;margin-bottom:24px;background:#111'>
+                <div style='text-align:center;font-size:0.75em;letter-spacing:4px;
+                    color:#c8a84b;text-transform:uppercase;margin-bottom:8px'>
+                    Singapore Criminal Investigation Department
+                </div>
+                <div style='text-align:center;font-size:2em;font-weight:900;
+                    color:#f0e6cc;letter-spacing:2px;line-height:1.2;font-family:Georgia,serif'>
+                    {case["title"]}
+                </div>
+                <div style='text-align:center;font-size:0.85em;color:#999;
+                    margin-top:8px;letter-spacing:1px'>
+                    📍 {case["setting"]}
+                </div>
+                <div style='text-align:center;font-size:0.75em;color:#666;margin-top:6px'>
+                    Difficulty: {diff_name} &nbsp;·&nbsp;
+                    {diff["max_turns"]} turns &nbsp;·&nbsp;
+                    Suspects go quiet after {diff["cagey_after"]} questions
+                </div>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-        # Victim block
+        # Victim
         st.markdown("### 💀 The Victim")
         st.markdown(
             f"<div style='background:#1a1a1a;border-left:4px solid #c8a84b;"
@@ -57,6 +47,16 @@ def show_briefing():
         )
         st.info(f"🔎 **Opening clue found at scene:** {case.get('opening_clue', '')}")
 
+        # Red herring callout (shown as a "tip" but is actually misleading)
+        red_herring = case.get("red_herring", {})
+        if red_herring:
+            rh_idx = red_herring.get("points_to_suspect_index", -1)
+            rh_name = case["suspects"][rh_idx]["name"] if 0 <= rh_idx < 3 else "unknown"
+            st.warning(
+                f"🚨 **Officer's note:** A piece of evidence at the scene appears to implicate "
+                f"**{rh_name}**. {red_herring.get('description', '')}"
+            )
+
         st.divider()
 
         # Suspects
@@ -65,7 +65,7 @@ def show_briefing():
             with st.expander(f"{s['name']} — {s['relationship_to_victim']}"):
                 st.write(f"**Alibi:** {s['alibi']}")
 
-        # Relationship map
+        # Relationships
         relationships = case.get("relationships", [])
         if relationships:
             st.markdown("### 🔗 Known Relationships")
@@ -80,9 +80,9 @@ def show_briefing():
 
         st.divider()
         st.warning(
-            f"⏱️ **Race against Inspector Rahim!** You have **{MAX_TURNS} turns** before he cracks "
-            f"the case. He'll make his first move at turn {AI_WRONG_GUESS_TURN}. "
-            f"Suspects get uncooperative if questioned too many times — spread your interrogations."
+            f"⏱️ **Race against Inspector Rahim!** You have **{diff['max_turns']} turns**. "
+            f"He makes his first move at turn {diff['wrong_guess_turn']}. "
+            f"Suspects become uncooperative after {diff['cagey_after']} questions."
         )
 
         if st.button("Begin Interrogations →", type="primary", use_container_width=True):
