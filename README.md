@@ -51,7 +51,7 @@ Most AI-powered games use the model as a single chatbot. This project explores w
    ```
    The app opens at `http://localhost:8501`.
 
-**Streamlit Cloud deployment:** Add `GROQ_API_KEY` as a secret under _Settings → Secrets_ instead of using a `.env` file.
+**Streamlit Cloud deployment:** Accessable at ai-murder-mystery.streamlit.app
 
 ---
 
