@@ -1,5 +1,6 @@
 import streamlit as st
 
+from config import MAX_TURNS
 from api import get_rahim_reaction
 
 TRANSITION_CSS = """
@@ -47,11 +48,10 @@ def show_reveal():
     rahim_solved = st.session_state.get("rahim_solved", False)
     accused_index = st.session_state.get("accusation")
     client = st.session_state.client
-    diff = get_difficulty(st.session_state.get("difficulty", "Medium"))
     turn = st.session_state.get("turn", 0)
 
     player_correct = (not rahim_solved) and (accused_index == killer_index)
-    score, rank = _calculate_score(turn, diff["max_turns"], player_correct, rahim_solved)
+    score, rank = _calculate_score(turn, MAX_TURNS, player_correct, rahim_solved)
 
     # Fetch Rahim's reaction once and cache it
     if "rahim_reaction_msg" not in st.session_state and accused_index is not None:
@@ -84,7 +84,7 @@ def show_reveal():
                 f"<div style='font-size:2em'>{'⭐' * score}</div>"
                 f"<div style='color:#c8a84b;font-size:1.3em;font-weight:bold'>{rank}</div>"
                 f"<div style='color:#888;font-size:0.9em'>"
-                f"Solved in {turn} / {diff['max_turns']} turns</div></div>",
+                f"Solved in {turn} / {MAX_TURNS} turns</div></div>",
                 unsafe_allow_html=True
             )
 

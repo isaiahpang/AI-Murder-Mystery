@@ -1,6 +1,7 @@
 import streamlit as st
 from groq import Groq
 
+from config import MAX_TURNS
 from utils import get_api_key
 from api import generate_case
 from ui.briefing import show_briefing
@@ -54,31 +55,13 @@ def main():
             )
             st.divider()
 
-            # Difficulty selector
-            st.markdown("### Select Difficulty")
-            diff_cols = st.columns(3)
-            for i, (name, cfg) in enumerate(DIFFICULTIES.items()):
-                with diff_cols[i]:
-                    selected = st.session_state.get("difficulty", "Medium") == name
-                    border = "#c8a84b" if selected else "#333"
-                    st.markdown(
-                        f"<div style='border:2px solid {border};border-radius:6px;"
-                        f"padding:12px;text-align:center;margin-bottom:8px'>"
-                        f"<strong style='color:#c8a84b'>{name}</strong><br>"
-                        f"<span style='font-size:0.8em;color:#999'>{cfg['description']}</span></div>",
-                        unsafe_allow_html=True
-                    )
-                    if st.button(f"Select {name}", key=f"diff_{name}", use_container_width=True):
-                        st.session_state.difficulty = name
-                        st.rerun()
-
             st.markdown("")
             chosen = st.session_state.get("difficulty", "Medium")
-            st.info(f"Selected: **{chosen}** — {DIFFICULTIES[chosen]['description']}")
+            st.info(f"Case uses the Tension Curve system: "f"{MAX_TURNS} turns total, escalating pressure over three acts.")
 
             if st.button("Generate New Case", type="primary", use_container_width=True):
                 with st.spinner("Generating your mystery..."):
-                    case = generate_case(st.session_state.client, chosen)
+                    case = generate_case(st.session_state.client)
                     st.session_state.case = case
                     st.session_state.phase = "briefing"
                     st.session_state.histories = [[] for _ in case["suspects"]]
