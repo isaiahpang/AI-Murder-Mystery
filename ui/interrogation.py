@@ -9,20 +9,28 @@ from api import (
 )
 from ui.evidence import render_evidence_board
 
+# ── Transition CSS ────────────────────────────────────────────────────────────
+TRANSITION_CSS = """
+<style>
+@keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+    animation: fadeSlideIn 0.4s ease forwards;
+}
+</style>
+<div class="fade-in" style="display:none"></div>
+"""
+
 def _refresh_suggested_questions(client: Groq, idx: int):
     """Fetch fresh suggested questions for the active suspect."""
     st.session_state.suggested_questions = get_suggested_questions(client, idx)
 
-def _generate_rahim_interrogation(client: Groq, suspect_index: int):
-    """Generate and cache Rahim's parallel interrogation of a suspect."""
-    key = f"rahim_int_{suspect_index}"
-    if key not in st.session_state.rahim_interrogations:
-        result = get_rahim_interrogation(client, suspect_index)
-        if result:
-            st.session_state.rahim_interrogations[key] = result
-
 def show_interrogation():
     """Render the full interrogation screen."""
+    st.markdown(TRANSITION_CSS, unsafe_allow_html=True)
+
     client: Groq = st.session_state.client
     case = st.session_state.case
     suspects = case["suspects"]
@@ -37,9 +45,6 @@ def show_interrogation():
     if st.session_state.get("sq_key") != sq_key:
         _refresh_suggested_questions(client, idx)
         st.session_state.sq_key = sq_key
-
-    # Generate Rahim's interrogation of active suspect in background
-    _generate_rahim_interrogation(client, idx)
 
     # ── Sidebar ──────────────────────────────────────────────────────────────
     with st.sidebar:
@@ -67,18 +72,22 @@ def show_interrogation():
 
         st.divider()
 
-        # Player notes panel
+        # Notes panel with autosave indicator
         st.markdown("### 📓 Your Notes")
-        notes = st.text_area(
+        notes_val = st.session_state.get("player_notes", "")
+        new_notes = st.text_area(
             label="notes",
-            value=st.session_state.get("player_notes", ""),
-            height=180,
-            placeholder="Write your thoughts, suspicions, and observations here...",
+            value=notes_val,
+            height=160,
+            placeholder="Write your suspicions here...",
             label_visibility="collapsed",
             key="notes_input"
         )
-        if notes != st.session_state.get("player_notes", ""):
-            st.session_state.player_notes = notes
+        if new_notes != notes_val:
+            st.session_state.player_notes = new_notes
+            st.session_state.notes_saved_flash = True
+        if st.session_state.pop("notes_saved_flash", False):
+            st.caption("✓ Notes saved")
 
         st.divider()
         st.markdown("### ⚖️ Accuse")
@@ -102,7 +111,7 @@ def show_interrogation():
         render_evidence_board()
         st.divider()
 
-        # Active suspect
+        # Active suspect header
         suspect = suspects[idx]
         q_count = len(st.session_state.histories[idx]) // 2
         is_cagey = q_count >= cagey_after
@@ -129,33 +138,46 @@ def show_interrogation():
 
         st.markdown("")
 
-        # Conversation history — player's interrogation
+        # Player conversation history
         for msg in st.session_state.histories[idx]:
             with st.chat_message("user" if msg["role"] == "user" else "assistant"):
                 st.write(msg["content"])
 
-        # Rahim's parallel interrogation of this suspect (collapsible)
-        rahim_int = st.session_state.rahim_interrogations.get(f"rahim_int_{idx}")
-        if rahim_int:
-            with st.expander(f"🚔 Inspector Rahim also questioned {suspect['name']}", expanded=False):
-                st.markdown(
-                    f"<div style='background:#1a1a2e;border-left:3px solid #c8a84b;"
-                    f"padding:10px 14px;border-radius:4px;margin:4px 0'>"
-                    f"<strong>Rahim:</strong> {rahim_int.get('rahim_question','')}</div>",
-                    unsafe_allow_html=True
-                )
-                st.markdown(
-                    f"<div style='background:#1a1a1a;border-left:3px solid #555;"
-                    f"padding:10px 14px;border-radius:4px;margin:4px 0'>"
-                    f"<strong>{suspect['name']}:</strong> {rahim_int.get('suspect_reply','')}</div>",
-                    unsafe_allow_html=True
-                )
-                st.markdown(
-                    f"<div style='background:#1a1a2e;border-left:3px solid #888;"
-                    f"padding:10px 14px;border-radius:4px;margin:4px 0'>"
-                    f"<em>Rahim thinks: {rahim_int.get('rahim_reaction','')}</em></div>",
-                    unsafe_allow_html=True
-                )
+        # Rahim's interrogations of this suspect — shows ALL visits, newest first
+        rahim_all = st.session_state.get("rahim_interrogations", {}).get(str(idx), [])
+        if rahim_all:
+            with st.expander(
+                f"🚔 Inspector Rahim questioned {suspect['name']} "
+                f"({len(rahim_all)} time{'s' if len(rahim_all) > 1 else ''})",
+                expanded=False
+            ):
+                for i, entry in enumerate(reversed(rahim_all)):
+                    if len(rahim_all) > 1:
+                        st.caption(f"Visit {len(rahim_all) - i}")
+                    st.markdown(
+                        f"<div style='background:#1a1a2e;border-left:3px solid #c8a84b;"
+                        f"padding:10px 14px;border-radius:4px;margin:4px 0'>"
+                        f"<strong>Rahim:</strong> {entry.get('rahim_question','')}</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        f"<div style='background:#1a1a1a;border-left:3px solid #555;"
+                        f"padding:10px 14px;border-radius:4px;margin:4px 0'>"
+                        f"<strong>{suspect['name']}:</strong> {entry.get('suspect_reply','')}</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        f"<div style='background:#111;border-left:3px solid #444;"
+                        f"padding:8px 14px;border-radius:4px;margin:4px 0;font-style:italic;"
+                        f"color:#888'>"
+                        f"Rahim thinks: {entry.get('rahim_reaction','')}</div>",
+                        unsafe_allow_html=True
+                    )
+                    if i < len(rahim_all) - 1:
+                        st.markdown("---")
+
+        # Scroll anchor so chat input stays visible after rerun
+        st.markdown("<div id='chat-anchor'></div>", unsafe_allow_html=True)
 
         # Chat input
         prefill = st.session_state.pop("pending_question", None)
@@ -169,18 +191,24 @@ def show_interrogation():
                     reply = interrogate_suspect(client, idx, question)
                 st.write(reply)
 
+            # Extract clues (dedup handled in api.py)
             new_clues = extract_clues(client, suspect["name"], reply)
             if "clues" not in st.session_state:
                 st.session_state.clues = []
             st.session_state.clues.extend(new_clues)
 
+            # Generate fresh Rahim interrogation after each player turn
+            get_rahim_interrogation(client, idx)
+
+            # Invalidate question cache
             st.session_state.pop("sq_key", None)
             st.session_state.pop("suggested_questions", None)
 
+            # Advance turn
             st.session_state.turn = turn + 1
             new_turn = st.session_state.turn
 
-            # Milestone check first, then cadence
+            # Milestone check first, then cadence commentary
             rahim = get_ai_detective_update(client, new_turn)
             if rahim:
                 st.session_state.rahim_messages.append(rahim["message"])

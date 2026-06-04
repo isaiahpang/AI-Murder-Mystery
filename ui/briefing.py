@@ -1,8 +1,20 @@
 import streamlit as st
 from config import get_difficulty
 
+TRANSITION_CSS = """
+<style>
+@keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fadeSlideIn 0.4s ease forwards; }
+</style>
+<div class="fade-in" style="display:none"></div>
+"""
+
 def show_briefing():
     """Render the case briefing screen with newspaper dark theme."""
+    st.markdown(TRANSITION_CSS, unsafe_allow_html=True)
     case = st.session_state.case
     diff_name = st.session_state.get("difficulty", "Medium")
     diff = get_difficulty(diff_name)

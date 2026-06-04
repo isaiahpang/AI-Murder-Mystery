@@ -7,7 +7,7 @@ from prompts import (
     CLUE_EXTRACTION_PROMPT,
     build_rahim_milestone_prompt,
     RAHIM_COMMENTARY_PROMPT,
-    RAHIM_INTERROGATION_PROMPT,
+    build_rahim_interrogation_prompt,
     RAHIM_REACTION_PROMPT,
     build_suspect_prompt,
     SUGGESTED_QUESTIONS_PROMPT,
@@ -199,34 +199,54 @@ Player interrogation transcripts:
 # ── Inspector Rahim — his own interrogation of a suspect ─────────────────────
 
 def get_rahim_interrogation(client: Groq, suspect_index: int) -> dict | None:
-    """Generate a parallel Rahim interrogation of a suspect, focused on the red herring."""
+    """Generate a fresh Rahim interrogation that evolves with each visit, never repeating questions."""
     case = st.session_state.case
     suspect = case["suspects"][suspect_index]
     is_killer = (suspect_index == case["killer_index"])
     red_herring = case.get("red_herring", {})
     rh_idx = red_herring.get("points_to_suspect_index", -1)
-    # Rahim interrogates the red herring suspect most aggressively
-    focus = "This suspect is your primary focus due to the red herring evidence." if suspect_index == rh_idx else "You are questioning this suspect as part of due diligence."
+    focus = (
+        "This suspect is your PRIMARY focus — the red herring evidence points strongly to them."
+        if suspect_index == rh_idx
+        else "You are questioning this suspect as routine due diligence."
+    )
+
+    # Collect prior questions asked to this suspect to avoid repetition
+    prior = [
+        entry["rahim_question"]
+        for entry in st.session_state.get("rahim_interrogations", {}).get(str(suspect_index), [])
+    ]
+    turn = st.session_state.get("turn", 0)
 
     try:
         result = client.chat.completions.create(
             model=MODEL,
             messages=[
-                {"role": "system", "content": RAHIM_INTERROGATION_PROMPT},
+                {"role": "system", "content": build_rahim_interrogation_prompt(prior)},
                 {"role": "user", "content": f"""
 Case: {case['title']}
+Setting: {case['setting']}
 Suspect: {suspect['name']} — {suspect['relationship_to_victim']}
-Suspect personality: {suspect['personality']}
-Suspect alibi: {suspect['alibi']}
+Personality: {suspect['personality']}
+Alibi: {suspect['alibi']}
 Red herring: {red_herring.get('description', '')}
+Investigation turn: {turn}
 {focus}
-{'This suspect is INNOCENT.' if not is_killer else 'This suspect is the KILLER but do not reveal that — Rahim does not know yet.'}
+{'This suspect is INNOCENT.' if not is_killer else 'This suspect is the KILLER — Rahim does not know this yet.'}
+Player has asked this suspect {len(st.session_state.histories[suspect_index]) // 2} questions so far.
 """}
             ],
-            temperature=0.85,
+            temperature=0.9,
             max_tokens=350,
         )
-        return safe_parse_json(result.choices[0].message.content)
+        parsed = safe_parse_json(result.choices[0].message.content)
+        # Append to list of all Rahim interrogations for this suspect
+        if parsed:
+            key = str(suspect_index)
+            rahim_ints = st.session_state.setdefault("rahim_interrogations", {})
+            rahim_ints.setdefault(key, []).append(parsed)
+            st.session_state.rahim_interrogations = rahim_ints
+        return parsed
     except Exception:
         return None
 

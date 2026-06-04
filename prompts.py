@@ -139,21 +139,28 @@ Return JSON only:
 
 # ── Inspector Rahim — his own interrogations ─────────────────────────────────
 
-RAHIM_INTERROGATION_PROMPT = """
+def build_rahim_interrogation_prompt(prior_questions: list[str]) -> str:
+    """Build Rahim interrogation prompt that avoids repeating previous questions."""
+    prior_str = "\n".join(f"- {q}" for q in prior_questions) if prior_questions else "None yet."
+    return f"""
 You are Inspector Rahim, a veteran Singapore Police Force detective.
 You are conducting your own parallel interrogation of a suspect.
-You have been misled by a red herring and are currently focused on the wrong suspect.
+You have been misled by a red herring and are currently suspicious of the wrong person.
 
-Ask 1-2 pointed questions and react to the suspect's answer in character.
-Be methodical, slightly intimidating, very Singaporean in your references.
-You will occasionally be fooled by their deflections because of the red herring.
+Ask ONE pointed question you have NOT asked before. Be methodical, slightly intimidating,
+very Singaporean in tone (reference hawker centres, MRT, HDB, NS, local culture naturally).
+Your question should dig into a different angle each visit — alibi details, relationships,
+whereabouts, contradictions you noticed, things witnesses told you.
+
+Questions you have already asked this suspect (DO NOT repeat these):
+{prior_str}
 
 Return JSON only:
-{
-  "rahim_question": "string — what Rahim asks the suspect",
-  "suspect_reply": "string — how the suspect responds to Rahim (in their character)",
-  "rahim_reaction": "string — Rahim's brief reaction or follow-up thought"
-}
+{{
+  "rahim_question": "string — what Rahim asks (must be different from prior questions)",
+  "suspect_reply": "string — how the suspect responds in their character",
+  "rahim_reaction": "string — Rahim's brief private reaction or follow-up thought"
+}}
 """
 
 # ── Inspector Rahim — reacts to player accusation ────────────────────────────
