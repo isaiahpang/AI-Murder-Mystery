@@ -1,129 +1,254 @@
 # Singapore Murder Mystery
 
-An AI-generated murder mystery game set in Singapore where you interrogate suspects, gather clues, and race Inspector Rahim to identify the killer before he does. Every case is AI-generated using Groq's LLM and a structured case-generation pipeline. No two games are the same.
+An AI-generated murder mystery game set in Singapore where you interrogate suspects, gather evidence, test your theories, and race Inspector Rahim to identify the killer before the investigation reaches its conclusion. Every case is generated dynamically using Groq's LLM and a structured case-generation pipeline, creating unique suspects, motives, evidence trails, and red herrings for every playthrough.
 
-Intended for players who enjoy deduction games, and for developers or students exploring conversational AI and multi-agent game design.
+The project explores how multiple AI-driven roles can interact within a single game system, creating an investigation experience where suspects, witnesses, forensic analysts, and rival detectives all contribute to an evolving narrative rather than functioning as isolated chatbots.
 
 ---
 
 ## Problem Statement
 
-Most AI-powered games use the model as a single chatbot. This project explores what happens when multiple AI personas — suspects, a rival detective, a forensic analyst, a witness — run in parallel and react to each other's actions. The result is a game where the AI opposition has genuine consequences: Inspector Rahim's wrong accusation changes how suspects behave, and breaking evidence surfaces on a dramatic timer rather than on demand. The goal was to make AI feel like a world, not a window.
+Most AI-powered games use a single language model as a conversation partner. This project explores a different approach: treating the AI as an entire investigative ecosystem.
+
+Instead of interacting with one chatbot, players engage with multiple AI personas that each possess different information, objectives, and perspectives. Suspects protect themselves, forensic analysts interpret evidence, witnesses provide testimony, and Inspector Rahim conducts his own parallel investigation.
+
+The goal was to create an experience where the player's decisions affect the broader investigation rather than simply producing individual responses. Information surfaces over time, suspects become more guarded as pressure increases, and competing deductions create tension throughout the case.
 
 ---
 
 ## Technology Stack
 
 - **Language:** Python 3.11
-- **UI framework:** Streamlit
+- **UI Framework:** Streamlit
 - **AI API:** Groq API (`llama-3.3-70b-versatile`)
 - **Libraries:** `groq`, `python-dotenv`
-- **Hosting:** Streamlit Community Cloud (or local)
+- **Deployment:** Streamlit Community Cloud
+
+---
+
+## Core Features
+
+### AI-Generated Cases
+
+Every new game generates:
+
+- A unique victim
+- Multiple suspects
+- Distinct motives
+- Evidence chains
+- False leads and red herrings
+- Hidden culprit relationships
+
+No case content is hardcoded, ensuring high replayability.
+
+### Dynamic Suspect Interrogation
+
+Players can freely question suspects through natural language conversations.
+
+Suspects:
+
+- Respond in character
+- Maintain awareness of previously discussed topics
+- React to accusations and pressure
+- Become increasingly guarded later in the investigation
+- May accidentally reveal inconsistencies under scrutiny
+
+### Deduction Board
+
+Players can build theories and submit reasoning before making a formal accusation.
+
+The AI evaluates:
+
+- Evidence quality
+- Logical consistency
+- Missing investigative gaps
+- Strength of motive
+- Reliability of conclusions
+
+This allows players to test theories before committing to an arrest.
+
+### Inspector Rahim
+
+Rahim acts as a rival investigator rather than a passive narrative device.
+
+Throughout the case he:
+
+- Conducts his own investigation
+- Forms independent conclusions
+- Makes deductions based on available evidence
+- Creates time pressure for the player
+
+His progress serves as both narrative tension and a soft investigation timer.
+
+### Tension Curve System
+
+The game no longer uses traditional difficulty modes.
+
+Instead, every investigation follows a structured narrative progression:
+
+#### Act I — Investigation
+
+- Suspects are relatively cooperative
+- Players gather foundational information
+- Early theories begin forming
+
+#### Act II — Escalation
+
+- Suspects become more defensive
+- New evidence surfaces
+- Contradictions become more apparent
+- Pressure on both investigators increases
+
+#### Act III — Resolution
+
+- Critical evidence emerges
+- Rahim approaches his conclusion
+- Players must commit to a final theory before the investigation ends
+
+This creates a more consistent dramatic experience than static difficulty settings.
 
 ---
 
 ## Setup Instructions
 
-1. Clone the repository:
+### 1. Clone the Repository
 
-   ```bash
-   git clone https://github.com/your-username/singapore-murder-mystery.git
-   cd singapore-murder-mystery
-   ```
+```bash
+git clone https://github.com/your-username/singapore-murder-mystery.git
+cd singapore-murder-mystery
+```
 
-2. Install dependencies:
+### 2. Install Dependencies
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+```
 
-3. Copy the example environment file and add your Groq API key:
+### 3. Configure Environment Variables
 
-   ```bash
-   cp .env.example .env
-   ```
+Copy the example environment file:
 
-   Open `.env` and replace `your_groq_api_key_here` with your key from [console.groq.com](https://console.groq.com).
+```bash
+cp .env.example .env
+```
 
-4. Run the application:
-   ```bash
-   streamlit run app.py
-   ```
-   The app opens at `http://localhost:8501`.
+Open `.env` and add your Groq API key:
 
-**Streamlit Cloud deployment:** Accessable at ai-murder-mystery.streamlit.app
+```env
+GROQ_API_KEY=your_api_key_here
+```
+
+Obtain an API key from:
+
+https://console.groq.com
+
+### 4. Run the Application
+
+```bash
+streamlit run app.py
+```
+
+The application will launch at:
+
+```text
+http://localhost:8501
+```
+
+### Deployment
+
+The project is deployed on Streamlit Community Cloud:
+
+```text
+https://ai-murder-mystery.streamlit.app
+```
 
 ---
 
 ## Usage Examples
 
-### Example 1 — Interrogating a suspect
+### Example 1 — Interrogating a Suspect
 
-The player selects a suspect and types a question into the chat input:
+The player questions a suspect:
 
 > **Player:** Where were you on the night of the murder?
 >
-> **Mdm Chua Bee Leng:** I already told the other officer lah — I was at my sister's place in Tampines. We were watching drama together until past midnight. Ask her if you don't believe me, her name is Linda, same block as me.
+> **Mdm Chua Bee Leng:** I already told the other officer lah — I was at my sister's place in Tampines. We were watching drama together until past midnight. Ask her if you don't believe me.
 
-The response is generated in-character. If the suspect is guilty, small inconsistencies slip in under pressure. If Inspector Rahim already asked them the same question, they may reference it: _"That other detective also kept asking about this — what exactly are you all implying, hah?"_
+Responses remain contextual throughout the investigation and may change depending on prior conversations and investigation progress.
 
 ---
 
 ### Example 2 — Using the Deduction Board
 
-After collecting clues, the player opens the Deduction Board, selects a suspect, and writes their reasoning:
+The player submits a theory:
 
-> **Player's reasoning:** Rajan's alibi places him at Bedok MRT but the CCTV clue shows someone matching his description at the void deck at 10:45pm. He was evasive when I challenged his alibi and couldn't name a single person who saw him there.
+> Rajan's alibi places him at Bedok MRT, but CCTV evidence places someone matching his description near the victim's block at 10:45pm. He was evasive when challenged and failed to provide corroborating witnesses.
 
-The player clicks **Evaluate My Case**. The AI case reviewer responds:
+The AI evaluates the case:
 
 > **Verdict: Shaky**
-> The CCTV finding is your strongest piece, but it hasn't been formally linked to Rajan by name — only by description. You haven't addressed his stated motive or the relationship with the victim. Consider pressing him on why he knew the victim's schedule.
 >
-> **Gaps:** No motive established · CCTV link is circumstantial · Alibi witness unchecked
+> The CCTV evidence is compelling but remains circumstantial. You have not established a clear motive or connected Rajan directly to the victim's schedule. Consider investigating their prior relationship.
 
-The player can still accuse, but now knows what the weak points are.
+This provides guidance without revealing the true solution.
 
 ---
 
 ## Known Limitations
 
-**JSON reliability.** The game depends entirely on the LLM returning valid JSON on every call. A `safe_parse_json` utility handles malformed responses, but if the model returns invalid JSON three times in a row during case generation, the app surfaces an error and asks the player to retry. Under load or with certain prompt combinations this happens occasionally.
+### JSON Reliability
 
-**Red herring strength is inconsistent.** The red herring is generated alongside the case and is supposed to be convincing enough to mislead a careful player. In practice the model sometimes generates a weak red herring — one that a player can dismiss after a single question — which removes the intended tension in Act II. The `surface_trigger` field in the schema nudges the model toward delayed revelation, but it does not fully solve the problem.
+The application relies heavily on structured JSON responses from the language model.
+
+While utility functions attempt to repair malformed responses automatically, repeated failures can occasionally interrupt case generation or evidence creation.
+
+### Long-Term Consistency
+
+Because suspect responses are generated dynamically, details may occasionally drift during unusually long interrogation sessions despite memory and context safeguards.
+
+### Evidence Quality Variance
+
+Generated red herrings and evidence chains vary in quality between cases. Some investigations naturally produce stronger misdirection than others due to the probabilistic nature of language model generation.
 
 ---
 
 ## Future Improvements
 
-### 1. Enhanced Suspect Behaviour
+### 1. Enhanced Suspect Memory
 
-Improve suspect personalities and interrogation responses so that each character reacts more uniquely under pressure, making investigations feel less predictable and more dynamic.
+Introduce stronger long-term conversational memory to improve consistency across lengthy interrogations.
 
 ### 2. Smarter Inspector Rahim
 
-Expand Rahim’s investigative logic so his deductions evolve more naturally based on available evidence, creating a stronger sense of competition between the player and the AI detective.
+Allow Rahim to build and revise theories dynamically rather than following predefined investigation milestones.
 
-### 3. More Advanced Evidence Systems
+### 3. Expanded Evidence Systems
 
-Introduce additional evidence types such as digital forensics, financial records, and surveillance data to create deeper investigative pathways.
+Add digital forensics, financial records, mobile device data, surveillance footage, and social connections as investigative tools.
 
-### 4. Improved Deduction Board
+### 4. Advanced Deduction Board
 
-Enhance the deduction board with evidence linking, contradiction highlighting, and visual relationship mapping to help players build stronger cases.
+Support evidence linking, contradiction tracking, and visual relationship mapping between suspects, motives, and clues.
 
-### 5. Dynamic Difficulty Scaling
+### 5. Witness Discovery System
 
-Adapt suspect cooperation, clue availability, and investigative complexity based on player performance to provide a more personalized challenge.
+Replace the current witness mechanic with discoverable witnesses that emerge naturally through investigation and evidence gathering.
 
-### 6. Witness System Redesign
+### 6. Additional Mystery Archetypes
 
-Replace the current one-button witness call with named witnesses that emerge naturally through interrogations and evidence. Players would need to identify, locate, and question witnesses themselves, turning witness discovery into an investigative skill rather than a single-use power-up. This would create a more engaging and rewarding late-game experience.
+Introduce new case structures such as:
 
-### 7. Replay Structural Variety
+- Accomplice murders
+- Multiple independent secrets
+- Framed suspects
+- Corporate conspiracies
+- Family inheritance disputes
+- Cold-case connections
 
-Increase replayability by introducing different case structures and mystery archetypes. Examples include accomplices, planted opening clues, multiple suspects concealing unrelated secrets, and layered motives. While this requires significant development effort, it would substantially extend the lifespan of the game once the core investigation loop is fully refined.
+### 7. Persistent Progression
 
-### 8. Replay Value and Scoring Persistence
+Implement investigation history, player profiles, scoring persistence, and leaderboards to encourage long-term replayability.
 
-Implement a persistent scoring and leaderboard system that tracks player performance across multiple cases. Metrics such as case completion rate, deduction accuracy, number of turns used, and evidence efficiency could encourage players to revisit the game and improve their investigative skills. This is a lower priority feature until the core gameplay loop is mature enough to support long-term replayability.
+### 8. Analytics and Evaluation
+
+Develop internal tools for measuring case quality, clue balance, and solution difficulty to improve generation reliability over time.
