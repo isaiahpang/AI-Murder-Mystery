@@ -89,8 +89,9 @@ def main():
                     st.session_state.rahim_messages = []
                     st.session_state.rahim_history = []
                     st.session_state.rahim_accused = ""
-                    st.session_state.rahim_interrogations = {}
+                    st.session_state.rahim_interrogations = {}  # {suspect_index_str: [list of visits]}
                     st.session_state.player_notes = ""
+                    st.session_state.witness_used = False
                 st.rerun()
         return
 

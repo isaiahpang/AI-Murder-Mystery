@@ -325,3 +325,187 @@ Conversation so far:
         return parsed.get("questions", []) if parsed else []
     except Exception:
         return []
+
+# ── Cross-examination ─────────────────────────────────────────────────────────
+
+def cross_examine_suspect(client: Groq, suspect_index: int, claim: str) -> dict:
+    """Confront a suspect with a specific claim made by someone else."""
+    from prompts import CROSS_EXAMINE_PROMPT
+    case = st.session_state.case
+    suspect = case["suspects"][suspect_index]
+    is_killer = (suspect_index == case["killer_index"])
+    history = st.session_state.histories[suspect_index]
+    questions_asked = len(history) // 2
+    cagey_after = _diff()["cagey_after"]
+
+    try:
+        result = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": CROSS_EXAMINE_PROMPT},
+                {"role": "user", "content": (
+                    f"Suspect: {suspect['name']}\n"
+                    f"Personality: {suspect['personality']}\n"
+                    f"Their alibi: {suspect['alibi']}\n"
+                    f"Are they guilty: {'YES' if is_killer else 'NO'}\n"
+                    f"Times questioned so far: {questions_asked}\n\n"
+                    f"Claim being confronted with:\n{claim}"
+                )}
+            ],
+            temperature=0.85,
+            max_tokens=300,
+        )
+        parsed = safe_parse_json(result.choices[0].message.content)
+        if parsed:
+            # Log confrontation in suspect's history
+            st.session_state.histories[suspect_index].append({
+                "role": "user",
+                "content": f"[Confrontation] {claim}"
+            })
+            st.session_state.histories[suspect_index].append({
+                "role": "assistant",
+                "content": parsed.get("response", "")
+            })
+            # If a new clue slipped out, add it to the board
+            new_clue_text = parsed.get("new_clue", "").strip()
+            if new_clue_text:
+                clues = st.session_state.setdefault("clues", [])
+                clues.append({
+                    "text": new_clue_text,
+                    "type": "contradiction",
+                    "links_to_suspect": suspect["name"],
+                    "source": "confrontation",
+                })
+        return parsed or {}
+    except Exception as e:
+        return {"response": f"[Error: {e}]", "new_clue": ""}
+
+# ── Alibi challenge ───────────────────────────────────────────────────────────
+
+def challenge_alibi(client: Groq, suspect_index: int) -> dict:
+    """Press a suspect hard on their alibi, forcing them to provide verifiable detail."""
+    from prompts import ALIBI_CHALLENGE_PROMPT
+    case = st.session_state.case
+    suspect = case["suspects"][suspect_index]
+    is_killer = (suspect_index == case["killer_index"])
+
+    try:
+        result = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": ALIBI_CHALLENGE_PROMPT},
+                {"role": "user", "content": (
+                    f"Suspect: {suspect['name']}\n"
+                    f"Personality: {suspect['personality']}\n"
+                    f"Stated alibi: {suspect['alibi']}\n"
+                    f"Are they guilty: {'YES' if is_killer else 'NO'}\n"
+                    f"Alibi flaw (if guilty): {suspect.get('alibi_contradiction', 'N/A')}\n"
+                    f"Setting: {case['setting']}"
+                )}
+            ],
+            temperature=0.85,
+            max_tokens=300,
+        )
+        parsed = safe_parse_json(result.choices[0].message.content)
+        if parsed:
+            # Log in history so it appears in chat
+            st.session_state.histories[suspect_index].append({
+                "role": "user",
+                "content": "[Alibi Challenge] Prove your alibi. Give me something specific — a name, a time, a receipt. Something I can verify."
+            })
+            st.session_state.histories[suspect_index].append({
+                "role": "assistant",
+                "content": parsed.get("response", "")
+            })
+            # Add alibi detail or evasion as a clue
+            detail = parsed.get("detail_provided", "").strip()
+            ctype = "alibi" if detail and not parsed.get("is_evasive") else "contradiction"
+            clue_text = detail if detail else f"{suspect['name']} could not provide a verifiable alibi detail."
+            st.session_state.setdefault("clues", []).append({
+                "text": clue_text,
+                "type": ctype,
+                "links_to_suspect": suspect["name"],
+                "source": "alibi_challenge",
+            })
+        return parsed or {}
+    except Exception as e:
+        return {"response": f"[Error: {e}]", "detail_provided": "", "is_evasive": True}
+
+# ── Physical clue investigation ───────────────────────────────────────────────
+
+def investigate_physical_clue(client: Groq, clue_text: str) -> dict:
+    """Send a physical clue for forensic follow-up analysis."""
+    from prompts import INVESTIGATE_CLUE_PROMPT
+    case = st.session_state.case
+
+    try:
+        result = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": INVESTIGATE_CLUE_PROMPT},
+                {"role": "user", "content": (
+                    f"Case: {case['title']}\n"
+                    f"Setting: {case['setting']}\n"
+                    f"Victim: {case['victim']['name']}\n"
+                    f"Suspects: {', '.join(s['name'] for s in case['suspects'])}\n\n"
+                    f"Physical clue to investigate:\n{clue_text}"
+                )}
+            ],
+            temperature=0.8,
+            max_tokens=300,
+        )
+        parsed = safe_parse_json(result.choices[0].message.content)
+        if parsed:
+            # Add forensic finding as a new physical clue
+            suspect_link = parsed.get("points_to_suspect", "")
+            st.session_state.setdefault("clues", []).append({
+                "text": f"[Forensics] {parsed.get('finding', '')}",
+                "type": "physical",
+                "links_to_suspect": suspect_link,
+                "source": "forensic",
+            })
+        return parsed or {}
+    except Exception as e:
+        return {"finding": f"[Error: {e}]", "corroborates": False, "points_to_suspect": ""}
+
+# ── Witness call ──────────────────────────────────────────────────────────────
+
+def call_witness(client: Groq, suspect_index: int) -> dict:
+    """Call a one-time NPC witness who can confirm or contradict a suspect's alibi."""
+    from prompts import WITNESS_PROMPT
+    case = st.session_state.case
+    suspect = case["suspects"][suspect_index]
+    is_killer = (suspect_index == case["killer_index"])
+
+    try:
+        result = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": WITNESS_PROMPT},
+                {"role": "user", "content": (
+                    f"Case setting: {case['setting']}\n"
+                    f"Suspect: {suspect['name']}\n"
+                    f"Their stated alibi: {suspect['alibi']}\n"
+                    f"Should this witness CONFIRM or CONTRADICT the alibi: "
+                    f"{'CONTRADICT — the suspect is the killer and the alibi is false' if is_killer else 'CONFIRM — the suspect is innocent and was where they said'}\n"
+                    f"Alibi flaw if killer: {suspect.get('alibi_contradiction', '')}"
+                )}
+            ],
+            temperature=0.9,
+            max_tokens=400,
+        )
+        parsed = safe_parse_json(result.choices[0].message.content)
+        if parsed:
+            # Add witness statement as a clue
+            st.session_state.setdefault("clues", []).append({
+                "text": f"[Witness: {parsed.get('witness_name','')}] {parsed.get('new_clue','')}",
+                "type": "witness",
+                "links_to_suspect": parsed.get("suspect_name", suspect["name"]),
+                "source": "witness",
+            })
+            # Mark witness as used — only one per game
+            st.session_state.witness_used = True
+        return parsed or {}
+    except Exception as e:
+        return {"witness_name": "Unknown", "witness_statement": f"[Error: {e}]",
+                "confirms_alibi": True, "suspect_name": suspect["name"], "new_clue": ""}

@@ -145,6 +145,7 @@ def show_reveal():
                 "rahim_solved", "rahim_accused", "rahim_interrogations",
                 "rahim_reaction_msg", "pending_question", "sq_key",
                 "suggested_questions", "player_notes", "notes_saved_flash",
+                "witness_used",
             ]
             for key in keys_to_clear:
                 st.session_state.pop(key, None)

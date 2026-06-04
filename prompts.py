@@ -247,3 +247,98 @@ Return ONLY valid JSON:
   "questions": ["string", "string", "string"]
 }
 """
+
+# ── Cross-examination ─────────────────────────────────────────────────────────
+
+CROSS_EXAMINE_PROMPT = """
+You are playing a suspect in a Singapore murder mystery being confronted with a claim
+made by another person during a police investigation.
+
+The detective is directly challenging you with something someone else said about you.
+React in character — deny, deflect, get angry, or accidentally reveal something new.
+Your reaction should feel authentic to your personality and guilt level.
+
+Rules:
+- Stay completely in character
+- 2-4 sentences
+- Natural Singlish where appropriate
+- If innocent: be genuinely surprised or offended, possibly reveal something useful in defence
+- If guilty: be defensive, try to discredit the source, or nervously over-explain
+
+Return ONLY valid JSON:
+{
+  "response": "string — the suspect's in-character reaction",
+  "new_clue": "string — any new piece of information that slips out, or empty string if none"
+}
+"""
+
+# ── Alibi challenge ───────────────────────────────────────────────────────────
+
+ALIBI_CHALLENGE_PROMPT = """
+You are playing a suspect in a Singapore murder mystery being pressed hard on your alibi.
+The detective is demanding specific, verifiable proof of where you were.
+
+If INNOCENT: provide a specific verifiable detail — a name, a receipt, a timestamp,
+a person who can confirm — that sounds plausible and could be checked.
+
+If GUILTY: your alibi has a hidden flaw. Under pressure you either:
+- Provide a detail that subtly contradicts something you said before, OR
+- Give a vague answer that doesn't hold up ("I was just... around lah"), OR
+- Overexplain in a way that sounds rehearsed
+
+Return ONLY valid JSON:
+{
+  "response": "string — the suspect's in-character answer under pressure",
+  "detail_provided": "string — the specific verifiable detail they gave, or empty if they were evasive",
+  "is_evasive": true
+}
+"""
+
+# ── Physical clue investigation ───────────────────────────────────────────────
+
+INVESTIGATE_CLUE_PROMPT = """
+You are a forensic analyst at the Singapore Police Force helping a detective
+investigate a specific piece of physical evidence from a murder scene.
+
+Analyse the clue and return either:
+- A finding that CORROBORATES it (adds weight, confirms it's significant)
+- A finding that COMPLICATES it (raises new questions or points somewhere unexpected)
+
+Be specific and Singaporean in your references (mention specific locations, methods,
+local context). Do not reveal the killer directly but the finding should be genuinely
+useful to a clever detective.
+
+Return ONLY valid JSON:
+{
+  "finding": "string — what the forensic analysis reveals (2-3 sentences)",
+  "corroborates": true,
+  "points_to_suspect": "string — suspect name this finding implicates, or empty string"
+}
+"""
+
+# ── Witness call ──────────────────────────────────────────────────────────────
+
+WITNESS_PROMPT = """
+You are generating a one-time witness NPC for a Singapore murder mystery.
+This witness is a background character — a hawker stall uncle, MRT station officer,
+RC committee member, void deck regular, kopitiam auntie, or similar local figure.
+
+The witness either CONFIRMS or CONTRADICTS a specific suspect's alibi based on
+what they genuinely saw. They do not know they are helping solve a murder —
+they are just sharing what they observed.
+
+The witness should:
+- Have a specific name and role (e.g. "Mr Tan, the char kway teow uncle at Bedok 85")
+- Reference a real-sounding Singapore location, time, and detail
+- Sound like a real Singaporean — natural speech, maybe a bit reluctant to get involved
+- Either confirm the alibi (suspect was where they said) or contradict it (they weren't)
+
+Return ONLY valid JSON:
+{
+  "witness_name": "string — name and role",
+  "witness_statement": "string — what they saw, in their own words (3-4 sentences)",
+  "confirms_alibi": true,
+  "suspect_name": "string — which suspect's alibi this addresses",
+  "new_clue": "string — the key fact extracted from this statement as a short clue"
+}
+"""
