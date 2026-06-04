@@ -1,6 +1,6 @@
 # Singapore Murder Mystery
 
-An AI-generated murder mystery game set in Singapore where you interrogate suspects, gather clues, and race Inspector Rahim to identify the killer before he does. Every case is procedurally generated — no two games are the same.
+An AI-generated murder mystery game set in Singapore where you interrogate suspects, gather clues, and race Inspector Rahim to identify the killer before he does. Every case is AI-generated using Groq's LLM and a structured case-generation pipeline. No two games are the same.
 
 Intended for players who enjoy deduction games, and for developers or students exploring conversational AI and multi-agent game design.
 
@@ -96,6 +96,34 @@ The player can still accuse, but now knows what the weak points are.
 
 ## Future Improvements
 
-**Witness system redesign.** The current one-use witness button is a power-up, not a mechanic. A better version would surface named witnesses through suspect testimony — a suspect mentions "the auntie at the kopitiam saw me" — and the player actively chooses whether to track that lead down. This turns witness-calling into a skill and makes the clue graph richer.
+### 1. Enhanced Suspect Behaviour
 
-**Structural case variety.** Every case currently follows the same shape: one killer, one red herring, three suspects. Adding structural variants — an accomplice who provided a false alibi, a planted opening clue the killer left deliberately, a suspect hiding two separate secrets — would significantly extend replayability once the core loop is solid.
+Improve suspect personalities and interrogation responses so that each character reacts more uniquely under pressure, making investigations feel less predictable and more dynamic.
+
+### 2. Smarter Inspector Rahim
+
+Expand Rahim’s investigative logic so his deductions evolve more naturally based on available evidence, creating a stronger sense of competition between the player and the AI detective.
+
+### 3. More Advanced Evidence Systems
+
+Introduce additional evidence types such as digital forensics, financial records, and surveillance data to create deeper investigative pathways.
+
+### 4. Improved Deduction Board
+
+Enhance the deduction board with evidence linking, contradiction highlighting, and visual relationship mapping to help players build stronger cases.
+
+### 5. Dynamic Difficulty Scaling
+
+Adapt suspect cooperation, clue availability, and investigative complexity based on player performance to provide a more personalized challenge.
+
+### 6. Witness System Redesign
+
+Replace the current one-button witness call with named witnesses that emerge naturally through interrogations and evidence. Players would need to identify, locate, and question witnesses themselves, turning witness discovery into an investigative skill rather than a single-use power-up. This would create a more engaging and rewarding late-game experience.
+
+### 7. Replay Structural Variety
+
+Increase replayability by introducing different case structures and mystery archetypes. Examples include accomplices, planted opening clues, multiple suspects concealing unrelated secrets, and layered motives. While this requires significant development effort, it would substantially extend the lifespan of the game once the core investigation loop is fully refined.
+
+### 8. Replay Value and Scoring Persistence
+
+Implement a persistent scoring and leaderboard system that tracks player performance across multiple cases. Metrics such as case completion rate, deduction accuracy, number of turns used, and evidence efficiency could encourage players to revisit the game and improve their investigative skills. This is a lower priority feature until the core gameplay loop is mature enough to support long-term replayability.
