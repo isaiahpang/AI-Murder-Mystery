@@ -1,7 +1,6 @@
 import streamlit as st
 from groq import Groq
 
-from config import DIFFICULTIES
 from utils import get_api_key
 from api import generate_case
 from ui.briefing import show_briefing
