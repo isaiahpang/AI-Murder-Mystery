@@ -1,5 +1,4 @@
 import streamlit as st
-from config import TENSION_CURVE
 
 TRANSITION_CSS = """
 <style>
