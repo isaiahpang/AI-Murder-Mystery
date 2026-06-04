@@ -1,5 +1,5 @@
 import streamlit as st
-from config import get_difficulty
+
 from api import get_rahim_reaction
 
 TRANSITION_CSS = """
