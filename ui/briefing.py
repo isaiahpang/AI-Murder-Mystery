@@ -1,5 +1,11 @@
 import streamlit as st
 
+from config import (
+    MAX_TURNS,
+    CAGEY_AFTER,
+    BREAKING_EVIDENCE_TURN,
+    RAHIM_WRONG_GUESS_TURN,
+)
 TRANSITION_CSS = """
 <style>
 @keyframes fadeSlideIn {
@@ -21,7 +27,6 @@ def show_briefing():
     """
     st.markdown(TRANSITION_CSS, unsafe_allow_html=True)
     case = st.session_state.case
-    tc = TENSION_CURVE
 
     _, col, _ = st.columns([1, 6, 1])
     with col:
@@ -43,9 +48,9 @@ def show_briefing():
                     📍 {case["setting"]}
                 </div>
                 <div style='text-align:center;font-size:0.75em;color:#666;margin-top:6px'>
-                    {tc["max_turns"]} turns &nbsp;·&nbsp;
-                    Suspects go quiet after {tc["cagey_after"]} questions &nbsp;·&nbsp;
-                    Breaking evidence at turn {tc["breaking_evidence_turn"]}
+                    {MAX_TURNS} turns &nbsp;·&nbsp;
+                    Suspects go quiet after {CAGEY_AFTER} questions &nbsp;·&nbsp;
+                    Breaking evidence at turn {BREAKING_EVIDENCE_TURN}
                 </div>
             </div>
             """,
@@ -98,9 +103,9 @@ def show_briefing():
             f"<div style='color:#c8a84b;font-weight:bold;margin-bottom:8px'>⏱️ How this case unfolds</div>"
             f"<div style='font-size:0.88em;color:#aaa;line-height:1.7'>"
             f"🔍 <strong>Turns 1–5:</strong> Discovery — suspects are cooperative<br>"
-            f"⚠️ <strong>Turn {tc['rahim_wrong_turn']}:</strong> Inspector Rahim makes his move<br>"
-            f"🔥 <strong>Turn {tc['breaking_evidence_turn']}:</strong> Breaking evidence surfaces<br>"
-            f"☠️ <strong>Turn {tc['rahim_solves_turn']}:</strong> Rahim closes the case — you lose"
+            f"⚠️ <strong>Turn {RAHIM_WRONG_GUESS_TURN}:</strong> Inspector Rahim makes his move<br>"
+            f"🔥 <strong>Turn {BREAKING_EVIDENCE_TURN}:</strong> Breaking evidence surfaces<br>"
+            f"☠️ <strong>Turn {MAX_TURNS}:</strong> Rahim closes the case — you lose"
             f"</div></div>",
             unsafe_allow_html=True
         )
