@@ -1,7 +1,7 @@
 import streamlit as st
 from groq import Groq
 
-from config import MODEL, get_difficulty
+from config import TENSION_CURVE
 from prompts import (
     build_case_generation_prompt,
     CLUE_EXTRACTION_PROMPT,
@@ -9,16 +9,19 @@ from prompts import (
     RAHIM_COMMENTARY_PROMPT,
     build_rahim_interrogation_prompt,
     RAHIM_REACTION_PROMPT,
+    RAHIM_WRONG_ACCUSATION_FOLLOWUP_PROMPT,
     build_suspect_prompt,
     SUGGESTED_QUESTIONS_PROMPT,
+    build_breaking_evidence_prompt,
+    build_deduction_evaluation_prompt,
 )
 from utils import safe_parse_json
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _diff() -> dict:
-    """Return the current difficulty config from session state."""
-    return get_difficulty(st.session_state.get("difficulty", "Medium"))
+def _tc() -> dict:
+    """Return the tension curve config."""
+    return TENSION_CURVE
 
 def _build_transcripts(case: dict) -> str:
     """Build a readable transcript of all player interrogations so far."""
@@ -33,15 +36,27 @@ def _build_transcripts(case: dict) -> str:
             parts.append(f"Interrogation of {suspect['name']}:\n" + "\n".join(lines))
     return "\n\n".join(parts) if parts else "No interrogations yet."
 
+def _falsely_accused_index() -> int | None:
+    """Return the index of the suspect Rahim falsely accused, or None."""
+    rahim_accused = st.session_state.get("rahim_accused", "")
+    if not rahim_accused:
+        return None
+    case = st.session_state.case
+    killer_index = case["killer_index"]
+    for i, s in enumerate(case["suspects"]):
+        if s["name"] == rahim_accused and i != killer_index:
+            return i
+    return None
+
 # ── Case generation ───────────────────────────────────────────────────────────
 
-def generate_case(client: Groq, difficulty: str) -> dict:
+def generate_case(client: Groq) -> dict:
     """Call Groq to generate a new Singapore murder mystery case as JSON."""
-    prompt = build_case_generation_prompt(difficulty)
+    prompt = build_case_generation_prompt()
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
-                model=MODEL,
+                model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
                 messages=[
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": "Generate a new Singapore murder mystery case."}
@@ -68,18 +83,30 @@ def interrogate_suspect(client: Groq, suspect_index: int, question: str) -> str:
     is_killer = (suspect_index == case["killer_index"])
     history = st.session_state.histories[suspect_index]
     questions_asked = len(history) // 2
-    cagey_after = _diff()["cagey_after"]
+    cagey_after = _tc()["cagey_after"]
+
+    # Check if this suspect was falsely accused by Rahim
+    falsely_accused = (_falsely_accused_index() == suspect_index)
+
+    # Collect Rahim's prior questions to this suspect for cross-awareness
+    rahim_prior = [
+        entry["rahim_question"]
+        for entry in st.session_state.get("rahim_interrogations", {}).get(str(suspect_index), [])
+    ]
 
     messages = (
         [{"role": "system", "content": build_suspect_prompt(
-            suspect, case, is_killer, questions_asked, cagey_after
+            suspect, case, is_killer, questions_asked, cagey_after,
+            falsely_accused=falsely_accused,
+            rahim_prior_questions=rahim_prior,
         )}]
         + history
         + [{"role": "user", "content": question}]
     )
     try:
         response = client.chat.completions.create(
-            model=MODEL, messages=messages, temperature=0.8, max_tokens=300
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
+            messages=messages, temperature=0.8, max_tokens=300
         )
         reply = response.choices[0].message.content.strip()
         st.session_state.histories[suspect_index].append({"role": "user", "content": question})
@@ -96,7 +123,7 @@ def extract_clues(client: Groq, suspect_name: str, response_text: str) -> list:
     existing_summary = "\n".join(f"- {c['text']}" for c in existing) or "None yet."
     try:
         result = client.chat.completions.create(
-            model=MODEL,
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
             messages=[
                 {"role": "system", "content": CLUE_EXTRACTION_PROMPT},
                 {"role": "user", "content": (
@@ -117,11 +144,11 @@ def extract_clues(client: Groq, suspect_name: str, response_text: str) -> list:
 
 def get_ai_detective_update(client: Groq, turn: int) -> dict | None:
     """Return Rahim's milestone update at wrong-guess or solve turns, else None."""
-    diff = _diff()
-    wrong_turn = diff["wrong_guess_turn"]
-    max_turns = diff["max_turns"]
+    tc = _tc()
+    wrong_turn = tc["rahim_wrong_turn"]
+    solves_turn = tc["rahim_solves_turn"]
 
-    if turn not in [wrong_turn, max_turns]:
+    if turn not in [wrong_turn, solves_turn]:
         return None
 
     case = st.session_state.case
@@ -137,16 +164,16 @@ Victim: {case['victim']['name']}
 Suspects: {', '.join(s['name'] for s in case['suspects'])}
 Red herring points to: {rh_suspect_name} ({red_herring.get('description', '')})
 Current turn: {turn}
-{'Correct answer: ' + killer_name if turn == max_turns else f'WRONG accusation turn — accuse {rh_suspect_name} based on the red herring. Do NOT accuse {killer_name}.'}
+{'Correct answer: ' + killer_name if turn == solves_turn else f'WRONG accusation turn — accuse {rh_suspect_name} based on the red herring. Do NOT accuse {killer_name}.'}
 
 Player interrogation transcripts:
 {_build_transcripts(case)}
 """
     try:
         result = client.chat.completions.create(
-            model=MODEL,
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
             messages=[
-                {"role": "system", "content": build_rahim_milestone_prompt(wrong_turn, max_turns)},
+                {"role": "system", "content": build_rahim_milestone_prompt(wrong_turn, solves_turn)},
                 {"role": "user", "content": user_content}
             ],
             temperature=0.8,
@@ -160,16 +187,15 @@ Player interrogation transcripts:
 
 def get_rahim_commentary(client: Groq, turn: int) -> str | None:
     """Return a short Rahim comment on cadence turns, or None."""
-    diff = _diff()
-    cadence = diff["rahim_cadence"]
-    wrong_turn = diff["wrong_guess_turn"]
-    max_turns = diff["max_turns"]
+    tc = _tc()
+    cadence = tc["rahim_cadence"]
+    wrong_turn = tc["rahim_wrong_turn"]
+    solves_turn = tc["rahim_solves_turn"]
 
-    if turn % cadence != 0 or turn in [wrong_turn, max_turns] or turn == 0:
+    if turn % cadence != 0 or turn in [wrong_turn, solves_turn] or turn == 0:
         return None
 
     case = st.session_state.case
-    # Build Rahim's history for stateful commentary
     rahim_history = st.session_state.get("rahim_history", [])
 
     messages = [{"role": "system", "content": RAHIM_COMMENTARY_PROMPT}]
@@ -177,19 +203,19 @@ def get_rahim_commentary(client: Groq, turn: int) -> str | None:
     messages.append({"role": "user", "content": f"""
 Case: {case['title']}
 Setting: {case['setting']}
-Turn: {turn} of {max_turns}
+Turn: {turn} of {solves_turn}
 Player interrogation transcripts:
 {_build_transcripts(case)}
 """})
 
     try:
         result = client.chat.completions.create(
-            model=MODEL, messages=messages, temperature=0.9, max_tokens=150
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
+            messages=messages, temperature=0.9, max_tokens=150
         )
         parsed = safe_parse_json(result.choices[0].message.content)
         msg = parsed.get("message") if parsed else None
         if msg:
-            # Save to Rahim's own history for next call
             rahim_history.append({"role": "assistant", "content": msg})
             st.session_state.rahim_history = rahim_history
         return msg
@@ -211,7 +237,6 @@ def get_rahim_interrogation(client: Groq, suspect_index: int) -> dict | None:
         else "You are questioning this suspect as routine due diligence."
     )
 
-    # Collect prior questions asked to this suspect to avoid repetition
     prior = [
         entry["rahim_question"]
         for entry in st.session_state.get("rahim_interrogations", {}).get(str(suspect_index), [])
@@ -220,7 +245,7 @@ def get_rahim_interrogation(client: Groq, suspect_index: int) -> dict | None:
 
     try:
         result = client.chat.completions.create(
-            model=MODEL,
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
             messages=[
                 {"role": "system", "content": build_rahim_interrogation_prompt(prior)},
                 {"role": "user", "content": f"""
@@ -240,7 +265,6 @@ Player has asked this suspect {len(st.session_state.histories[suspect_index]) //
             max_tokens=350,
         )
         parsed = safe_parse_json(result.choices[0].message.content)
-        # Append to list of all Rahim interrogations for this suspect
         if parsed:
             key = str(suspect_index)
             rahim_ints = st.session_state.setdefault("rahim_interrogations", {})
@@ -268,7 +292,7 @@ Rahim was: {'correct' if rahim_was_correct else 'wrong'}
 """
     try:
         result = client.chat.completions.create(
-            model=MODEL,
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
             messages=[
                 {"role": "system", "content": RAHIM_REACTION_PROMPT},
                 {"role": "user", "content": context}
@@ -298,7 +322,7 @@ def get_suggested_questions(client: Groq, suspect_index: int) -> list[str]:
 
     try:
         result = client.chat.completions.create(
-            model=MODEL,
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
             messages=[
                 {"role": "system", "content": SUGGESTED_QUESTIONS_PROMPT},
                 {"role": "user", "content": f"""
@@ -336,11 +360,11 @@ def cross_examine_suspect(client: Groq, suspect_index: int, claim: str) -> dict:
     is_killer = (suspect_index == case["killer_index"])
     history = st.session_state.histories[suspect_index]
     questions_asked = len(history) // 2
-    cagey_after = _diff()["cagey_after"]
+    cagey_after = _tc()["cagey_after"]
 
     try:
         result = client.chat.completions.create(
-            model=MODEL,
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
             messages=[
                 {"role": "system", "content": CROSS_EXAMINE_PROMPT},
                 {"role": "user", "content": (
@@ -357,7 +381,6 @@ def cross_examine_suspect(client: Groq, suspect_index: int, claim: str) -> dict:
         )
         parsed = safe_parse_json(result.choices[0].message.content)
         if parsed:
-            # Log confrontation in suspect's history
             st.session_state.histories[suspect_index].append({
                 "role": "user",
                 "content": f"[Confrontation] {claim}"
@@ -366,7 +389,6 @@ def cross_examine_suspect(client: Groq, suspect_index: int, claim: str) -> dict:
                 "role": "assistant",
                 "content": parsed.get("response", "")
             })
-            # If a new clue slipped out, add it to the board
             new_clue_text = parsed.get("new_clue", "").strip()
             if new_clue_text:
                 clues = st.session_state.setdefault("clues", [])
@@ -391,7 +413,7 @@ def challenge_alibi(client: Groq, suspect_index: int) -> dict:
 
     try:
         result = client.chat.completions.create(
-            model=MODEL,
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
             messages=[
                 {"role": "system", "content": ALIBI_CHALLENGE_PROMPT},
                 {"role": "user", "content": (
@@ -408,7 +430,6 @@ def challenge_alibi(client: Groq, suspect_index: int) -> dict:
         )
         parsed = safe_parse_json(result.choices[0].message.content)
         if parsed:
-            # Log in history so it appears in chat
             st.session_state.histories[suspect_index].append({
                 "role": "user",
                 "content": "[Alibi Challenge] Prove your alibi. Give me something specific — a name, a time, a receipt. Something I can verify."
@@ -417,7 +438,6 @@ def challenge_alibi(client: Groq, suspect_index: int) -> dict:
                 "role": "assistant",
                 "content": parsed.get("response", "")
             })
-            # Add alibi detail or evasion as a clue
             detail = parsed.get("detail_provided", "").strip()
             ctype = "alibi" if detail and not parsed.get("is_evasive") else "contradiction"
             clue_text = detail if detail else f"{suspect['name']} could not provide a verifiable alibi detail."
@@ -440,7 +460,7 @@ def investigate_physical_clue(client: Groq, clue_text: str) -> dict:
 
     try:
         result = client.chat.completions.create(
-            model=MODEL,
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
             messages=[
                 {"role": "system", "content": INVESTIGATE_CLUE_PROMPT},
                 {"role": "user", "content": (
@@ -456,7 +476,6 @@ def investigate_physical_clue(client: Groq, clue_text: str) -> dict:
         )
         parsed = safe_parse_json(result.choices[0].message.content)
         if parsed:
-            # Add forensic finding as a new physical clue
             suspect_link = parsed.get("points_to_suspect", "")
             st.session_state.setdefault("clues", []).append({
                 "text": f"[Forensics] {parsed.get('finding', '')}",
@@ -479,7 +498,7 @@ def call_witness(client: Groq, suspect_index: int) -> dict:
 
     try:
         result = client.chat.completions.create(
-            model=MODEL,
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
             messages=[
                 {"role": "system", "content": WITNESS_PROMPT},
                 {"role": "user", "content": (
@@ -496,16 +515,82 @@ def call_witness(client: Groq, suspect_index: int) -> dict:
         )
         parsed = safe_parse_json(result.choices[0].message.content)
         if parsed:
-            # Add witness statement as a clue
             st.session_state.setdefault("clues", []).append({
                 "text": f"[Witness: {parsed.get('witness_name','')}] {parsed.get('new_clue','')}",
                 "type": "witness",
                 "links_to_suspect": parsed.get("suspect_name", suspect["name"]),
                 "source": "witness",
             })
-            # Mark witness as used — only one per game
             st.session_state.witness_used = True
         return parsed or {}
     except Exception as e:
         return {"witness_name": "Unknown", "witness_statement": f"[Error: {e}]",
                 "confirms_alibi": True, "suspect_name": suspect["name"], "new_clue": ""}
+
+# ── Breaking evidence (Act III auto-drop) ─────────────────────────────────────
+
+def trigger_breaking_evidence(client: Groq) -> dict | None:
+    """
+    Called at the breaking_evidence_turn. Dramatises the case's pre-generated
+    breaking_evidence and adds it to the clue board.
+    Only fires once per game.
+    """
+    if st.session_state.get("breaking_evidence_triggered"):
+        return None
+
+    case = st.session_state.case
+    breaking_evidence = case.get("breaking_evidence")
+    if not breaking_evidence:
+        return None
+
+    try:
+        result = client.chat.completions.create(
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
+            messages=[
+                {"role": "system", "content": build_breaking_evidence_prompt(breaking_evidence, case)},
+                {"role": "user", "content": "Deliver the breaking evidence update."}
+            ],
+            temperature=0.8,
+            max_tokens=250,
+        )
+        parsed = safe_parse_json(result.choices[0].message.content)
+        if parsed:
+            # Add as a high-priority physical clue
+            suspect_link = parsed.get("points_to_suspect", "")
+            st.session_state.setdefault("clues", []).append({
+                "text": f"[BREAKING] {breaking_evidence.get('description', '')}",
+                "type": "physical",
+                "links_to_suspect": suspect_link,
+                "source": "breaking_evidence",
+            })
+            st.session_state.breaking_evidence_triggered = True
+        return parsed
+    except Exception:
+        return None
+
+# ── Deduction board — evaluate player's reasoning ────────────────────────────
+
+def evaluate_deduction(client: Groq, accused_name: str, player_reasoning: str) -> dict:
+    """
+    Evaluate the logical strength of the player's case before they formally accuse.
+    Returns verdict (solid/shaky/weak), feedback, missing pieces, and ready_to_accuse flag.
+    """
+    case = st.session_state.case
+    clues = st.session_state.get("clues", [])
+
+    try:
+        result = client.chat.completions.create(
+            model=st.session_state.get("MODEL", "llama-3.3-70b-versatile"),
+            messages=[
+                {"role": "system", "content": build_deduction_evaluation_prompt(
+                    case, clues, player_reasoning, accused_name
+                )},
+                {"role": "user", "content": "Evaluate this case."}
+            ],
+            temperature=0.5,
+            max_tokens=400,
+        )
+        parsed = safe_parse_json(result.choices[0].message.content)
+        return parsed or {"verdict": "weak", "feedback": "Could not evaluate.", "missing_pieces": [], "ready_to_accuse": False}
+    except Exception as e:
+        return {"verdict": "weak", "feedback": f"[Error: {e}]", "missing_pieces": [], "ready_to_accuse": False}

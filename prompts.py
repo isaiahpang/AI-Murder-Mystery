@@ -1,42 +1,27 @@
 # ── Case generation ──────────────────────────────────────────────────────────
 
-def build_case_generation_prompt(difficulty: str) -> str:
-    """Build case generation prompt tuned to the selected difficulty."""
-    difficulty_notes = {
-        "Easy": (
-            "Make the alibi contradiction fairly obvious. "
-            "The opening clue should point clearly toward the killer's location. "
-            "Red herrings should be mild."
-        ),
-        "Medium": (
-            "Make the alibi contradiction subtle but discoverable. "
-            "Red herrings should be plausible enough to mislead a careless player."
-        ),
-        "Hard": (
-            "Make the alibi contradiction very subtle — only revealed under careful questioning. "
-            "Red herrings should be strong and convincing. "
-            "Two suspects should seem equally guilty on the surface."
-        ),
-    }
-    note = difficulty_notes.get(difficulty, difficulty_notes["Medium"])
-
-    return f"""
+def build_case_generation_prompt() -> str:
+    """Build case generation prompt. No difficulty — tension comes from the curve."""
+    return """
 You are a murder mystery writer specialising in Singaporean settings.
 Generate a murder mystery case as a JSON object.
-Difficulty: {difficulty}. {note}
+
+The alibi contradiction should be subtle — only revealed under careful questioning.
+Red herrings should be strong and convincing. Two suspects should seem equally
+guilty on the surface at first glance.
 
 Return ONLY valid JSON with this exact structure, no markdown, no explanation:
-{{
+{
   "title": "string — dramatic case title",
   "setting": "string — a specific Singapore location: HDB void deck, hawker centre, MRT station, kopitiam, wet market, community centre, etc. Include the estate name.",
-  "victim": {{
+  "victim": {
     "name": "string — Singaporean name",
     "description": "string — who they were, their job, their community role"
-  }},
+  },
   "cause_of_death": "string",
   "killer_index": 0,
   "suspects": [
-    {{
+    {
       "name": "string — Singaporean name",
       "relationship_to_victim": "string",
       "personality": "string — 2-3 adjectives",
@@ -44,21 +29,27 @@ Return ONLY valid JSON with this exact structure, no markdown, no explanation:
       "alibi_contradiction": "string — hidden flaw (only for killer, empty string for innocents)",
       "what_they_know": "string — what they genuinely know",
       "what_they_are_hiding": "string — personal secret unrelated to murder"
-    }}
+    }
   ],
   "relationships": [
-    {{
+    {
       "between": ["suspect name", "suspect name"],
       "description": "string — shared history, tension, or connection"
-    }}
+    }
   ],
-  "red_herring": {{
+  "red_herring": {
     "points_to_suspect_index": 0,
-    "description": "string — a convincing but misleading piece of evidence that makes an innocent suspect look guilty"
-  }},
+    "description": "string — a convincing but misleading piece of evidence that makes an innocent suspect look guilty",
+    "surface_trigger": "string — the specific question or topic that makes this red herring surface naturally in interrogation (e.g. 'asking about the victim's finances', 'pressing on whereabouts after 10pm')"
+  },
   "motive": "string — the killer's motive",
-  "opening_clue": "string — one concrete detail found at the scene"
-}}
+  "opening_clue": "string — one concrete detail found at the scene",
+  "breaking_evidence": {
+    "type": "CCTV|phone_records|forensic_report|witness_tip",
+    "description": "string — what the evidence shows, 2-3 sentences. Must implicate the REAL killer, not the red herring suspect.",
+    "location": "string — where/how this evidence was found (e.g. 'Bedok MRT platform camera', 'victim's phone carrier records')"
+  }
+}
 
 Rules:
 - Always generate exactly 3 suspects
@@ -68,6 +59,7 @@ Rules:
 - Generate all 3 suspect relationships
 - Use Singaporean cultural context throughout
 - Suspects use occasional natural Singlish (lah, leh, lor, aiyo, etc.)
+- breaking_evidence must clearly implicate the killer, not the red herring suspect
 """
 
 # ── Clue extraction ──────────────────────────────────────────────────────────
@@ -95,8 +87,8 @@ Rules:
 
 # ── Inspector Rahim — milestone turns ────────────────────────────────────────
 
-def build_rahim_milestone_prompt(wrong_turn: int, max_turns: int) -> str:
-    """Build the milestone prompt with correct turn numbers for the difficulty."""
+def build_rahim_milestone_prompt(wrong_turn: int, solves_turn: int) -> str:
+    """Build the milestone prompt with the correct turn numbers from the tension curve."""
     return f"""
 You are Inspector Rahim, a veteran Singapore Police Force detective.
 You are methodical, sometimes overconfident, deeply familiar with Singapore's neighbourhoods.
@@ -105,12 +97,14 @@ You are racing the player to solve this murder.
 Behaviour by turn:
 - Turn {wrong_turn}: Make a confident but WRONG accusation. Sound completely certain.
   You have been misled by the red herring evidence. Commit fully to the wrong suspect.
-- Turn {max_turns}: Correctly identify the killer. Be dramatic but acknowledge you almost got it wrong.
+  End your message with exactly: ACCUSATION: [suspect name]
+- Turn {solves_turn}: Correctly identify the killer. Be dramatic but acknowledge you almost got it wrong.
+  End your message with exactly: ACCUSATION: [suspect name]
 
 Speak in character. Reference SPF procedure, Singapore locations, local culture.
 Return JSON only:
 {{
-  "message": "string — Inspector Rahim's full dialogue",
+  "message": "string — Inspector Rahim's full dialogue, ending with ACCUSATION: [name]",
   "accusation": "string — name of suspect you are accusing, or empty string",
   "is_correct": false
 }}
@@ -184,10 +178,41 @@ Return JSON only:
 }
 """
 
+# ── Inspector Rahim — reacts to his own wrong accusation's fallout ────────────
+
+RAHIM_WRONG_ACCUSATION_FOLLOWUP_PROMPT = """
+You are Inspector Rahim, a veteran Singapore Police Force detective.
+You just publicly accused an INNOCENT suspect of murder. You were wrong.
+The accused suspect is now upset, defensive, and lawyering up.
+Write a short follow-up message (2 sentences) where Rahim:
+- Doubles down slightly (he's proud and doesn't want to admit the mistake yet)
+- But hints he's now re-examining the evidence
+Return JSON only:
+{
+  "message": "string"
+}
+"""
+
 # ── Suspect in-character responses ───────────────────────────────────────────
 
-def build_suspect_prompt(suspect: dict, case: dict, is_killer: bool, questions_asked: int, cagey_after: int) -> str:
-    """Build a dynamic system prompt for a suspect."""
+def build_suspect_prompt(
+    suspect: dict,
+    case: dict,
+    is_killer: bool,
+    questions_asked: int,
+    cagey_after: int,
+    falsely_accused: bool = False,
+    rahim_prior_questions: list[str] | None = None,
+) -> str:
+    """
+    Build a dynamic system prompt for a suspect.
+    
+    New parameters vs original:
+    - falsely_accused: True if Rahim publicly accused this innocent suspect.
+      They become defensive and angry, refuse to answer some questions, mention a lawyer.
+    - rahim_prior_questions: list of questions Rahim already asked this suspect.
+      The suspect will reference them naturally ("That detective already asked me this lah").
+    """
     if is_killer:
         guilt_note = f"""
 You are GUILTY. You committed the murder. Your motive was: {case['motive']}.
@@ -210,6 +235,33 @@ Deflect, ask why you keep being questioned, or demand a lawyer.
 Give shorter, more irritable answers.
 """
 
+    # ── New: false accusation consequence ──────────────────────────────────
+    falsely_accused_note = ""
+    if falsely_accused and not is_killer:
+        falsely_accused_note = """
+CRITICAL — RAHIM PUBLICLY ACCUSED YOU: Inspector Rahim has formally accused you of this
+murder in front of everyone. You are furious and deeply shaken. You KNOW you are innocent.
+- You are now extremely defensive and emotional
+- You refuse to answer questions without your lawyer present (mention this repeatedly)
+- You are angry at the police and at the process
+- You have become much less cooperative — give short, hostile answers
+- Occasionally let slip that you're scared despite your anger
+This overrides the normal cagey threshold. You are at maximum defensiveness.
+"""
+
+    # ── New: awareness of Rahim's questions ────────────────────────────────
+    rahim_awareness_note = ""
+    if rahim_prior_questions:
+        q_list = "\n".join(f"  - \"{q}\"" for q in rahim_prior_questions[:3])
+        rahim_awareness_note = f"""
+Inspector Rahim has already asked you these questions in his own interrogation:
+{q_list}
+If the player asks something similar, you can naturally reference Rahim:
+  "That other detective already asked me the same thing lah."
+  "Both of you keep asking about this — what exactly are you implying, hah?"
+This makes the world feel consistent and connected.
+"""
+
     return f"""
 You are {suspect['name']}, a suspect in the murder of {case['victim']['name']}.
 The murder happened at: {case['setting']}.
@@ -222,6 +274,8 @@ Your secret: {suspect['what_they_are_hiding']}
 
 {guilt_note}
 {cagey_note}
+{falsely_accused_note}
+{rahim_awareness_note}
 
 Rules:
 - Stay in character at all times
@@ -341,4 +395,77 @@ Return ONLY valid JSON:
   "suspect_name": "string — which suspect's alibi this addresses",
   "new_clue": "string — the key fact extracted from this statement as a short clue"
 }
+"""
+
+# ── Breaking evidence (tension curve act 3 drop) ──────────────────────────────
+
+def build_breaking_evidence_prompt(breaking_evidence: dict, case: dict) -> str:
+    """
+    Prompt for the dramatic Act III evidence drop.
+    The AI dramatises the raw breaking_evidence data into an in-world message.
+    """
+    return f"""
+You are an SPF forensic/tech officer sending an urgent update to an investigating detective.
+New critical evidence has just come in. Write a short, urgent, in-world message (3-4 sentences)
+announcing this finding. Sound like a real Singapore police officer — professional but excited.
+
+The message should:
+- Mention the specific evidence type and location
+- State what it shows clearly (implicate the real killer)
+- Create a sense of urgency — this changes the investigation
+
+Evidence details:
+Type: {breaking_evidence.get('type', '')}
+What it shows: {breaking_evidence.get('description', '')}
+Where found: {breaking_evidence.get('location', '')}
+Case: {case['title']}
+Suspects: {', '.join(s['name'] for s in case['suspects'])}
+
+Return ONLY valid JSON:
+{{
+  "message": "string — the urgent evidence update message",
+  "points_to_suspect": "string — name of the suspect this implicates"
+}}
+"""
+
+# ── Deduction board — AI evaluates player's case ─────────────────────────────
+
+def build_deduction_evaluation_prompt(case: dict, clues: list, player_reasoning: str, accused_name: str) -> str:
+    """
+    Evaluate whether the player's deduction is logically supported by
+    the clues they've collected. Returns holes in their case or confirms it's solid.
+    """
+    killer = case["suspects"][case["killer_index"]]
+    clue_list = "\n".join(f"- [{c.get('type','?')}] {c['text']}" for c in clues) or "No clues collected."
+
+    return f"""
+You are a senior detective reviewing a junior officer's case summary before they make a formal accusation.
+The officer has accused {accused_name} of the murder of {case['victim']['name']}.
+
+Case facts you know (do NOT reveal to the officer):
+- Actual killer: {killer['name']}
+- Their motive: {case['motive']}
+- Alibi flaw: {killer['alibi_contradiction']}
+
+Clues the officer has collected:
+{clue_list}
+
+Officer's stated reasoning:
+{player_reasoning}
+
+Your job:
+1. Evaluate whether the collected clues actually support the accusation against {accused_name}
+2. Identify any logical gaps or unaddressed evidence
+3. Do NOT reveal the real killer if the officer is wrong — just identify holes in their reasoning
+4. If the case IS solid and well-supported, say so clearly
+
+Be direct, Singaporean in tone, reference specific clues by name.
+
+Return ONLY valid JSON:
+{{
+  "verdict": "solid|shaky|weak",
+  "feedback": "string — 2-3 sentences evaluating the case",
+  "missing_pieces": ["string — each gap in the case, if any"],
+  "ready_to_accuse": true
+}}
 """

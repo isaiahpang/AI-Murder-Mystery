@@ -1,5 +1,5 @@
 import streamlit as st
-from config import get_difficulty
+from config import TENSION_CURVE
 from api import get_rahim_reaction
 
 TRANSITION_CSS = """
@@ -13,16 +13,28 @@ TRANSITION_CSS = """
 <div class="fade-in" style="display:none"></div>
 """
 
-def _calculate_score(turn: int, max_turns: int, player_correct: bool, rahim_solved: bool) -> tuple[int, str]:
-    """Calculate score and rank based on performance."""
+def _calculate_score(turn: int, player_correct: bool, rahim_solved: bool) -> tuple[int, str]:
+    """Calculate score and rank based on performance against the tension curve."""
+    tc = TENSION_CURVE
+    max_turns = tc["max_turns"]
+    breaking_turn = tc["breaking_evidence_turn"]
+    rahim_wrong_turn = tc["rahim_wrong_turn"]
+
     if not player_correct or rahim_solved:
         return 0, "Case Unsolved"
-    turns_left = max_turns - turn
-    if turns_left >= max_turns * 0.6:
+
+    # Scoring tiers based on when the player cracked it
+    if turn < rahim_wrong_turn:
+        # Solved before Rahim even made his wrong move — exceptional
+        return 4, "🏆 Ghost Detective"
+    elif turn < breaking_turn:
+        # Solved in Act II — good detective work
         return 3, "Master Detective"
-    elif turns_left >= max_turns * 0.3:
+    elif turn < max_turns - 2:
+        # Solved in Act III with time to spare
         return 2, "Good Work, Officer"
     else:
+        # Squeaked it in at the last moment
         return 1, "Close Call, Inspector"
 
 def _build_full_transcript(case: dict) -> str:
@@ -47,11 +59,11 @@ def show_reveal():
     rahim_solved = st.session_state.get("rahim_solved", False)
     accused_index = st.session_state.get("accusation")
     client = st.session_state.client
-    diff = get_difficulty(st.session_state.get("difficulty", "Medium"))
+    tc = TENSION_CURVE
     turn = st.session_state.get("turn", 0)
 
     player_correct = (not rahim_solved) and (accused_index == killer_index)
-    score, rank = _calculate_score(turn, diff["max_turns"], player_correct, rahim_solved)
+    score, rank = _calculate_score(turn, player_correct, rahim_solved)
 
     # Fetch Rahim's reaction once and cache it
     if "rahim_reaction_msg" not in st.session_state and accused_index is not None:
@@ -64,13 +76,15 @@ def show_reveal():
     with col:
         st.title("⚖️ Case Closed")
 
-        # Outcome
+        # Outcome banner
         if rahim_solved:
             st.error("🚔 Inspector Rahim cracked the case before you!")
             st.markdown(f"The killer was **{killer['name']}**. Better luck next time, lah.")
         elif player_correct:
-            st.success(f"{'⭐' * score} **{rank}** — You beat Inspector Rahim!")
-            st.balloons()
+            stars = "⭐" * min(score, 4)
+            st.success(f"{stars} **{rank}** — You beat Inspector Rahim!")
+            if score >= 3:
+                st.balloons()
         else:
             accused = case["suspects"][accused_index]
             st.error(f"❌ Wrong. You accused **{accused['name']}**, but they were innocent.")
@@ -78,13 +92,22 @@ def show_reveal():
 
         # Score card
         if player_correct and not rahim_solved:
+            # Contextual flavour text per tier
+            tier_notes = {
+                4: "Solved before Rahim even made his wrong move. Extraordinary.",
+                3: f"Solved in Act II — before the breaking evidence at turn {tc['breaking_evidence_turn']}.",
+                2: "Cracked it in Act III with evidence in hand.",
+                1: "Cut it close, but you got there.",
+            }
             st.markdown(
                 f"<div style='background:#1a1a1a;border:2px solid #c8a84b;border-radius:8px;"
                 f"padding:16px;text-align:center;margin:16px 0'>"
-                f"<div style='font-size:2em'>{'⭐' * score}</div>"
+                f"<div style='font-size:2em'>{'⭐' * min(score, 4)}</div>"
                 f"<div style='color:#c8a84b;font-size:1.3em;font-weight:bold'>{rank}</div>"
-                f"<div style='color:#888;font-size:0.9em'>"
-                f"Solved in {turn} / {diff['max_turns']} turns</div></div>",
+                f"<div style='color:#888;font-size:0.9em;margin-top:4px'>"
+                f"Solved at turn {turn} / {tc['max_turns']}</div>"
+                f"<div style='color:#666;font-size:0.82em;margin-top:6px'>"
+                f"{tier_notes.get(score, '')}</div></div>",
                 unsafe_allow_html=True
             )
 
@@ -101,6 +124,20 @@ def show_reveal():
         st.markdown(f"**Motive:** {case['motive']}")
         st.markdown(f"**Alibi flaw:** {killer['alibi_contradiction']}")
 
+        # Breaking evidence reveal
+        breaking = case.get("breaking_evidence", {})
+        if breaking:
+            st.markdown(
+                f"<div style='background:#1a1a2e;border-left:4px solid #8844cc;"
+                f"padding:10px 14px;border-radius:4px;margin:8px 0'>"
+                f"🔬 <strong>Breaking evidence ({breaking.get('type','')}):</strong> "
+                f"{breaking.get('description','')}<br>"
+                f"<span style='color:#888;font-size:0.85em'>Found at: {breaking.get('location','')}</span>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+
+        # Red herring reveal
         red_herring = case.get("red_herring", {})
         if red_herring:
             rh_idx = red_herring.get("points_to_suspect_index", -1)
@@ -112,6 +149,12 @@ def show_reveal():
                 f"was a deliberate misdirection. {red_herring.get('description','')}</div>",
                 unsafe_allow_html=True
             )
+
+        # Player's deduction reasoning (if they used the board)
+        deduction_reasoning = st.session_state.get("deduction_reasoning", "").strip()
+        if deduction_reasoning:
+            with st.expander("📋 Your Deduction Reasoning", expanded=False):
+                st.markdown(deduction_reasoning)
 
         # Player notes
         notes = st.session_state.get("player_notes", "").strip()
@@ -145,7 +188,9 @@ def show_reveal():
                 "rahim_solved", "rahim_accused", "rahim_interrogations",
                 "rahim_reaction_msg", "pending_question", "sq_key",
                 "suggested_questions", "player_notes", "notes_saved_flash",
-                "witness_used",
+                "witness_used", "breaking_evidence_triggered",
+                "deduction_mode", "deduction_reasoning", "deduction_evaluation",
+                "deduction_suspect_idx", "last_evaluated_suspect",
             ]
             for key in keys_to_clear:
                 st.session_state.pop(key, None)

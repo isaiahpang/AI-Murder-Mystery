@@ -12,9 +12,11 @@ DEFAULT_CONFIG = {"label": "General observation", "icon": "🔍", "border": "#44
 TYPE_ORDER = ["contradiction", "motive", "physical", "witness", "alibi"]
 
 def _clue_card_html(text: str, ctype: str, cross_ref: str, is_flagged: bool) -> str:
-    """Render a single clue card as styled HTML."""
     cfg = CLUE_CONFIG.get(ctype, DEFAULT_CONFIG)
     flag = "⭐ " if is_flagged else ""
+    # Breaking evidence gets a gold border
+    if text.startswith("[BREAKING]"):
+        cfg = {"label": "Breaking Evidence", "icon": "🔥", "border": "#c8a84b", "bg": "#2a1e00"}
     cross = (
         f"<div style='margin-top:5px;font-size:0.78em;color:#aaa'>"
         f"↔ also implicates <strong>{cross_ref}</strong></div>"
@@ -34,14 +36,12 @@ def _clue_card_html(text: str, ctype: str, cross_ref: str, is_flagged: bool) -> 
     )
 
 def render_evidence_board():
-    """Render the detective's case file with verification actions on each clue."""
     clues = st.session_state.get("clues", [])
     flagged = st.session_state.setdefault("flagged_clues", set())
     case = st.session_state.case
     suspects = case["suspects"]
     suspect_names = [s["name"] for s in suspects]
 
-    # ── Header ────────────────────────────────────────────────────────────────
     total = len(clues)
     st.markdown(
         f"<div style='display:flex;align-items:center;justify-content:space-between;"
@@ -52,7 +52,6 @@ def render_evidence_board():
         unsafe_allow_html=True
     )
 
-    # Opening clue
     opening = case.get("opening_clue", "")
     if opening:
         st.markdown(
@@ -67,7 +66,6 @@ def render_evidence_board():
         _render_relationships(case)
         return
 
-    # ── Group clues ───────────────────────────────────────────────────────────
     linked = {s["name"]: [] for s in suspects}
     unlinked = []
     for ci, c in enumerate(clues):
@@ -83,7 +81,6 @@ def render_evidence_board():
                 return name
         return ""
 
-    # ── Column headers ────────────────────────────────────────────────────────
     cols = st.columns(3)
     for i, suspect in enumerate(suspects):
         count = len(linked[suspect["name"]])
@@ -97,7 +94,6 @@ def render_evidence_board():
                 unsafe_allow_html=True
             )
 
-    # ── Clue cards per suspect ────────────────────────────────────────────────
     cols = st.columns(3)
     for i, suspect in enumerate(suspects):
         sorted_clues = sorted(
@@ -118,11 +114,9 @@ def render_evidence_board():
                         unsafe_allow_html=True
                     )
 
-                    # Action buttons — laid out compactly below each card
                     source = c.get("source", "")
                     btn_cols = st.columns([1, 1, 1])
 
-                    # Flag toggle
                     with btn_cols[0]:
                         flag_label = "★ Flagged" if is_flagged else "☆ Flag"
                         if st.button(flag_label, key=f"flag_{clue_id}", use_container_width=True):
@@ -130,7 +124,6 @@ def render_evidence_board():
                             st.session_state.flagged_clues = flagged
                             st.rerun()
 
-                    # Confront button — if clue mentions another suspect
                     with btn_cols[1]:
                         if cross and source not in ("confrontation", "alibi_challenge", "forensic", "witness"):
                             cross_idx = next(
@@ -146,7 +139,6 @@ def render_evidence_board():
                                     }
                                     st.rerun()
 
-                    # Investigate button — physical clues only, not already investigated
                     with btn_cols[2]:
                         if ctype == "physical" and source != "forensic":
                             invest_key = f"investigated_{clue_id}"
@@ -168,7 +160,6 @@ def render_evidence_board():
                     unsafe_allow_html=True
                 )
 
-    # ── Unlinked clues ────────────────────────────────────────────────────────
     if unlinked:
         st.markdown(
             "<div style='margin-top:12px;font-size:0.85em;font-weight:bold;"
@@ -181,7 +172,6 @@ def render_evidence_board():
                 unsafe_allow_html=True
             )
 
-    # ── Flagged summary ───────────────────────────────────────────────────────
     if flagged:
         st.markdown(
             "<div style='margin-top:14px;font-size:0.85em;font-weight:bold;"
@@ -201,7 +191,6 @@ def render_evidence_board():
     _render_relationships(case)
 
 def _render_relationships(case: dict):
-    """Render the suspect relationship map at the bottom of the board."""
     relationships = case.get("relationships", [])
     if not relationships:
         return

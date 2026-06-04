@@ -1,5 +1,5 @@
 import streamlit as st
-from config import get_difficulty
+from config import TENSION_CURVE
 
 TRANSITION_CSS = """
 <style>
@@ -13,11 +13,16 @@ TRANSITION_CSS = """
 """
 
 def show_briefing():
-    """Render the case briefing screen with newspaper dark theme."""
+    """
+    Render the case briefing screen.
+    
+    Key change: the red herring is NOT shown here at all.
+    It surfaces naturally through interrogation, just like a real investigation.
+    The 'Officer's note' callout that used to hint at the red herring is gone.
+    """
     st.markdown(TRANSITION_CSS, unsafe_allow_html=True)
     case = st.session_state.case
-    diff_name = st.session_state.get("difficulty", "Medium")
-    diff = get_difficulty(diff_name)
+    tc = TENSION_CURVE
 
     _, col, _ = st.columns([1, 6, 1])
     with col:
@@ -39,9 +44,9 @@ def show_briefing():
                     📍 {case["setting"]}
                 </div>
                 <div style='text-align:center;font-size:0.75em;color:#666;margin-top:6px'>
-                    Difficulty: {diff_name} &nbsp;·&nbsp;
-                    {diff["max_turns"]} turns &nbsp;·&nbsp;
-                    Suspects go quiet after {diff["cagey_after"]} questions
+                    {tc["max_turns"]} turns &nbsp;·&nbsp;
+                    Suspects go quiet after {tc["cagey_after"]} questions &nbsp;·&nbsp;
+                    Breaking evidence at turn {tc["breaking_evidence_turn"]}
                 </div>
             </div>
             """,
@@ -59,15 +64,10 @@ def show_briefing():
         )
         st.info(f"🔎 **Opening clue found at scene:** {case.get('opening_clue', '')}")
 
-        # Red herring callout (shown as a "tip" but is actually misleading)
-        red_herring = case.get("red_herring", {})
-        if red_herring:
-            rh_idx = red_herring.get("points_to_suspect_index", -1)
-            rh_name = case["suspects"][rh_idx]["name"] if 0 <= rh_idx < 3 else "unknown"
-            st.warning(
-                f"🚨 **Officer's note:** A piece of evidence at the scene appears to implicate "
-                f"**{rh_name}**. {red_herring.get('description', '')}"
-            )
+        # NOTE: The red herring callout that was here has been deliberately removed.
+        # The player should discover misleading evidence through interrogation,
+        # not have it handed to them upfront. Showing it here was spoiling the game
+        # by telling the player who NOT to suspect.
 
         st.divider()
 
@@ -91,10 +91,24 @@ def show_briefing():
                 )
 
         st.divider()
+
+        # Tension curve overview — replaces difficulty warning
+        st.markdown(
+            f"<div style='background:#1a1a2e;border:1px solid #2a2a4a;border-radius:6px;"
+            f"padding:14px 18px;margin-bottom:16px'>"
+            f"<div style='color:#c8a84b;font-weight:bold;margin-bottom:8px'>⏱️ How this case unfolds</div>"
+            f"<div style='font-size:0.88em;color:#aaa;line-height:1.7'>"
+            f"🔍 <strong>Turns 1–5:</strong> Discovery — suspects are cooperative<br>"
+            f"⚠️ <strong>Turn {tc['rahim_wrong_turn']}:</strong> Inspector Rahim makes his move<br>"
+            f"🔥 <strong>Turn {tc['breaking_evidence_turn']}:</strong> Breaking evidence surfaces<br>"
+            f"☠️ <strong>Turn {tc['rahim_solves_turn']}:</strong> Rahim closes the case — you lose"
+            f"</div></div>",
+            unsafe_allow_html=True
+        )
+
         st.warning(
-            f"⏱️ **Race against Inspector Rahim!** You have **{diff['max_turns']} turns**. "
-            f"He makes his first move at turn {diff['wrong_guess_turn']}. "
-            f"Suspects become uncooperative after {diff['cagey_after']} questions."
+            f"⚠️ Build your case carefully. Use the **Deduction Board** before accusing — "
+            f"a wrong accusation ends the game. Inspector Rahim is running his own investigation in parallel."
         )
 
         if st.button("Begin Interrogations →", type="primary", use_container_width=True):
