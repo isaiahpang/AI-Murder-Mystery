@@ -20,7 +20,7 @@ The goal was to create an experience where the player's decisions affect the bro
 
 - **Language:** Python 3.11
 - **UI Framework:** Streamlit
-- **AI API:** Groq API (`llama-3.3-70b-versatile`)
+- **AI API:** Groq API (`llama-4-scout-17b-16e-instruct`)
 - **Libraries:** `groq`, `python-dotenv`
 - **Deployment:** Streamlit Community Cloud
 
