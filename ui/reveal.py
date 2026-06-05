@@ -83,9 +83,12 @@ def show_reveal():
         elif player_correct:
             st.success(f"{'⭐' * score} **{rank}** — You beat Inspector Rahim!")
             st.balloons()
-        else:
+        elif accused_index is not None:
             accused = case["suspects"][accused_index]
             st.error(f"❌ Wrong. You accused **{accused['name']}**, but they were innocent.")
+            st.markdown(f"The real killer was **{killer['name']}**.")
+        else:
+            st.error("❌ The investigation ended without an accusation.")
             st.markdown(f"The real killer was **{killer['name']}**.")
 
         # Score card
