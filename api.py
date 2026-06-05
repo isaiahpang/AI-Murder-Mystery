@@ -70,6 +70,7 @@ def _find_red_herring_suspect_name(case: dict) -> str:
 
 def generate_case(client: Groq) -> dict:
     """Call Groq to generate a new Singapore murder mystery case as JSON."""
+    last_error = None
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
@@ -84,11 +85,13 @@ def generate_case(client: Groq) -> dict:
             parsed = safe_parse_json(response.choices[0].message.content)
             if parsed:
                 return parsed
+            last_error = "Response was not valid JSON"
         except Exception as e:
-            if attempt == 2:
-                st.error(f"Failed to generate a valid case after 3 attempts: {e}")
-                st.stop()
-    return {}
+            last_error = str(e)
+    # All attempts exhausted — stop so callers never receive an empty dict
+    st.error(f"Failed to generate a valid case after 3 attempts: {last_error}")
+    st.stop()
+    return {}  # unreachable; satisfies type checkers
 
 
 # ── Breaking evidence (act 3 auto-drop) ──────────────────────────────────────
