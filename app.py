@@ -65,6 +65,8 @@ def main():
                     case = generate_case(st.session_state.client)
                     st.session_state.case = case
                     st.session_state.phase = "briefing"
+                    st.write("Case type:", type(case))
+                    st.write(case)
                     st.session_state.histories = [[] for _ in case["suspects"]]
                     st.session_state.active_suspect = 0
                     st.session_state.clues = []
