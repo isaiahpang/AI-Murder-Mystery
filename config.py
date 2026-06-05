@@ -1,5 +1,5 @@
 # ── Model ────────────────────────────────────────────────────────────────────
-MODEL = "llama-3.3-70b-versatile"
+MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 # ── Core game constants ───────────────────────────────────────────────────────
 MAX_TURNS = 12          # Total turns before Rahim solves it
