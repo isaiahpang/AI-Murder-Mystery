@@ -32,8 +32,9 @@ hr { border-color: #2a2a2a; }
 </style>
 """
 
+
 def main():
-    """App entry point — injects theme, handles difficulty selection, routes phases."""
+    """App entry point — injects theme, handles case generation, routes phases."""
     st.set_page_config(page_title="Singapore Murder Mystery", page_icon="🔍", layout="wide")
     st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
@@ -54,10 +55,10 @@ def main():
                 unsafe_allow_html=True
             )
             st.divider()
-
-            st.markdown("")
-            chosen = st.session_state.get("difficulty", "Medium")
-            st.info(f"Case uses the Tension Curve system: "f"{MAX_TURNS} turns total, escalating pressure over three acts.")
+            st.info(
+                f"Case uses the Tension Curve system: "
+                f"{MAX_TURNS} turns total, escalating pressure over three acts."
+            )
 
             if st.button("Generate New Case", type="primary", use_container_width=True):
                 with st.spinner("Generating your mystery..."):
@@ -72,7 +73,7 @@ def main():
                     st.session_state.rahim_messages = []
                     st.session_state.rahim_history = []
                     st.session_state.rahim_accused = ""
-                    st.session_state.rahim_interrogations = {}  # {suspect_index_str: [list of visits]}
+                    st.session_state.rahim_interrogations = {}
                     st.session_state.player_notes = ""
                     st.session_state.witness_used = False
                     st.session_state.breaking_evidence_dropped = False
@@ -89,6 +90,7 @@ def main():
         show_deduction()
     elif phase == "reveal":
         show_reveal()
+
 
 if __name__ == "__main__":
     main()

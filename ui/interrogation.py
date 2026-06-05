@@ -23,6 +23,7 @@ TRANSITION_CSS = """
 <div class="fade-in" style="display:none"></div>
 """
 
+
 def _get_act(turn: int) -> int:
     """Return current act number based on turn."""
     if turn >= ACT3_START:
@@ -31,9 +32,11 @@ def _get_act(turn: int) -> int:
         return 2
     return 1
 
+
 def _get_effective_cagey(act: int) -> int:
     """Cagey threshold tightens in act 3."""
     return max(2, CAGEY_AFTER - 1) if act == 3 else CAGEY_AFTER
+
 
 def _suspect_contradiction_count(suspect_name: str) -> int:
     """Count contradiction-type clues linked to a suspect."""
@@ -42,9 +45,11 @@ def _suspect_contradiction_count(suspect_name: str) -> int:
         if c.get("type") == "contradiction" and c.get("links_to_suspect") == suspect_name
     )
 
+
 def _refresh_suggested_questions(client: Groq, idx: int):
     """Fetch fresh suggested questions for the active suspect."""
     st.session_state.suggested_questions = get_suggested_questions(client, idx)
+
 
 def _maybe_refresh_rahim_interrogation(client: Groq, idx: int):
     """Generate a Rahim interrogation only when suspect changes or after a player turn."""
@@ -52,6 +57,7 @@ def _maybe_refresh_rahim_interrogation(client: Groq, idx: int):
     if st.session_state.get("rahim_int_key") != rahim_key:
         get_rahim_interrogation(client, idx)
         st.session_state.rahim_int_key = rahim_key
+
 
 def _advance_turn(client: Groq):
     """Increment turn, trigger Rahim updates, and fire act 3 breaking evidence if due."""
@@ -81,16 +87,25 @@ def _advance_turn(client: Groq):
         if commentary:
             st.session_state.setdefault("rahim_messages", []).append(commentary)
 
-def _handle_pending_actions(client: Groq):
-    """Process confront/investigate actions triggered from evidence board buttons."""
+
+def _handle_pending_actions(client: Groq) -> bool:
+    """
+    Process confront/investigate actions triggered from evidence board buttons.
+
+    Safety: we only pop the action AFTER the API call succeeds so that a network
+    error doesn't silently swallow the user's intent. Returns True if an action
+    was processed (caller should st.rerun()).
+    """
     case = st.session_state.case
 
-    confront = st.session_state.pop("pending_confront", None)
+    confront = st.session_state.get("pending_confront")
     if confront:
         suspect_idx = confront["suspect_index"]
         suspect = case["suspects"][suspect_idx]
         with st.spinner(f"Confronting {suspect['name']}..."):
             result = cross_examine_suspect(client, suspect_idx, confront["claim"])
+        # Only clear after successful call
+        st.session_state.pop("pending_confront", None)
         if result.get("response"):
             st.session_state.active_suspect = suspect_idx
             st.session_state.pop("sq_key", None)
@@ -98,10 +113,12 @@ def _handle_pending_actions(client: Groq):
             _advance_turn(client)
         return True
 
-    investigate = st.session_state.pop("pending_investigate", None)
+    investigate = st.session_state.get("pending_investigate")
     if investigate:
         with st.spinner("Sending to forensics..."):
             result = investigate_physical_clue(client, investigate["clue_text"])
+        # Only clear after successful call
+        st.session_state.pop("pending_investigate", None)
         if result.get("finding"):
             st.session_state[f"investigated_{investigate['clue_id']}"] = True
             st.session_state.forensic_flash = {
@@ -113,6 +130,7 @@ def _handle_pending_actions(client: Groq):
         return True
 
     return False
+
 
 def show_interrogation():
     """Render the full interrogation screen."""
@@ -145,7 +163,6 @@ def show_interrogation():
         st.markdown(f"### ⏱️ Turns Left: {turns_left}/{MAX_TURNS}")
         st.progress(turn / MAX_TURNS)
 
-        # Act indicator
         act_labels = {
             1: ("🟢 Act 1 — Exploration", "success"),
             2: ("🟡 Act 2 — Pressure", "warning"),
@@ -162,7 +179,6 @@ def show_interrogation():
             is_cagey = q_count >= cagey_after
             rahim_visited = i in st.session_state.get("rahim_visited_suspects", set())
 
-            # Build label with visual weight indicators
             indicators = []
             if is_cagey:
                 indicators.append("🔴")
@@ -182,9 +198,8 @@ def show_interrogation():
 
         st.divider()
 
-        # Notes panel — no rerun on keystroke
         st.markdown("### 📓 Your Notes")
-        new_notes = st.text_area(
+        st.text_area(
             label="notes",
             value=st.session_state.get("player_notes", ""),
             height=160,
@@ -236,7 +251,7 @@ def show_interrogation():
         render_evidence_board()
         st.divider()
 
-        # Active suspect header with weight indicators
+        # Active suspect header
         suspect = suspects[idx]
         q_count = len(st.session_state.histories[idx]) // 2
         is_cagey = q_count >= cagey_after
@@ -245,7 +260,6 @@ def show_interrogation():
 
         h_col, btn_col1, btn_col2 = st.columns([3, 1, 1])
         with h_col:
-            # Suspect name with contradiction heat indicator
             heat = ""
             if contradiction_count >= 3:
                 heat = " 🔥🔥🔥"
@@ -270,8 +284,7 @@ def show_interrogation():
         with btn_col1:
             alibi_key = f"alibi_challenged_{idx}"
             if not st.session_state.get(alibi_key):
-                if st.button("🔎 Challenge Alibi", key=f"ch_{idx}",
-                             use_container_width=True):
+                if st.button("🔎 Challenge Alibi", key=f"ch_{idx}", use_container_width=True):
                     with st.spinner("Pressing for details..."):
                         challenge_alibi(client, idx)
                     st.session_state[alibi_key] = True
@@ -283,8 +296,7 @@ def show_interrogation():
 
         with btn_col2:
             if not witness_used:
-                if st.button("📢 Witness", key=f"wit_{idx}",
-                             use_container_width=True):
+                if st.button("📢 Witness", key=f"wit_{idx}", use_container_width=True):
                     with st.spinner("Locating witness..."):
                         result = call_witness(client, idx)
                     if result.get("witness_statement"):
@@ -302,7 +314,6 @@ def show_interrogation():
         if is_cagey:
             st.warning(f"⚠️ {suspect['name']} is becoming uncooperative. Consider switching suspects.")
 
-        # Act 3 urgency banner
         if act == 3:
             st.error("🔴 **Act 3 — Crisis:** Inspector Rahim is closing in. Make your move.")
 
@@ -344,20 +355,20 @@ def show_interrogation():
                     st.markdown(
                         f"<div style='background:#1a1a2e;border-left:3px solid #c8a84b;"
                         f"padding:10px 14px;border-radius:4px;margin:4px 0'>"
-                        f"<strong>Rahim:</strong> {entry.get('rahim_question','')}</div>",
+                        f"<strong>Rahim:</strong> {entry.get('rahim_question', '')}</div>",
                         unsafe_allow_html=True
                     )
                     st.markdown(
                         f"<div style='background:#1a1a1a;border-left:3px solid #555;"
                         f"padding:10px 14px;border-radius:4px;margin:4px 0'>"
-                        f"<strong>{suspect['name']}:</strong> {entry.get('suspect_reply','')}</div>",
+                        f"<strong>{suspect['name']}:</strong> {entry.get('suspect_reply', '')}</div>",
                         unsafe_allow_html=True
                     )
                     st.markdown(
                         f"<div style='background:#111;border-left:3px solid #333;"
                         f"padding:8px 14px;border-radius:4px;margin:4px 0;"
                         f"font-style:italic;color:#777'>"
-                        f"Rahim thinks: {entry.get('rahim_reaction','')}</div>",
+                        f"Rahim thinks: {entry.get('rahim_reaction', '')}</div>",
                         unsafe_allow_html=True
                     )
 
@@ -378,7 +389,6 @@ def show_interrogation():
             new_clues = extract_clues(client, suspect["name"], reply)
             st.session_state.setdefault("clues", []).extend(new_clues)
 
-            # Invalidate caches so next render refreshes properly
             st.session_state.pop("sq_key", None)
             st.session_state.pop("rahim_int_key", None)
             st.session_state.pop("suggested_questions", None)

@@ -14,6 +14,7 @@ TRANSITION_CSS = """
 <div class="fade-in" style="display:none"></div>
 """
 
+
 def _calculate_score(turn: int, max_turns: int, player_correct: bool, rahim_solved: bool) -> tuple[int, str]:
     """Calculate score and rank based on performance."""
     if not player_correct or rahim_solved:
@@ -26,6 +27,7 @@ def _calculate_score(turn: int, max_turns: int, player_correct: bool, rahim_solv
     else:
         return 1, "Close Call, Inspector"
 
+
 def _build_full_transcript(case: dict) -> str:
     """Build the full player interrogation transcript."""
     parts = []
@@ -37,6 +39,16 @@ def _build_full_transcript(case: dict) -> str:
                 speaker = "🕵️ **You**" if msg["role"] == "user" else f"👤 **{suspect['name']}**"
                 parts.append(f"{speaker}: {msg['content']}")
     return "\n\n".join(parts) if parts else "No interrogations recorded."
+
+
+def _find_red_herring_suspect(case: dict) -> dict | None:
+    """Return the innocent suspect with a red_herring_detail, or None."""
+    killer_index = case["killer_index"]
+    for i, s in enumerate(case["suspects"]):
+        if i != killer_index and s.get("red_herring_detail"):
+            return s
+    return None
+
 
 def show_reveal():
     """Render the final case reveal with scoring, Rahim reaction, and full replay."""
@@ -64,7 +76,7 @@ def show_reveal():
     with col:
         st.title("⚖️ Case Closed")
 
-        # Outcome
+        # Outcome banner
         if rahim_solved:
             st.error("🚔 Inspector Rahim cracked the case before you!")
             st.markdown(f"The killer was **{killer['name']}**. Better luck next time, lah.")
@@ -101,15 +113,16 @@ def show_reveal():
         st.markdown(f"**Motive:** {case['motive']}")
         st.markdown(f"**Alibi flaw:** {killer['alibi_contradiction']}")
 
-        red_herring = case.get("red_herring", {})
-        if red_herring:
-            rh_idx = red_herring.get("points_to_suspect_index", -1)
-            rh_name = case["suspects"][rh_idx]["name"] if 0 <= rh_idx < 3 else "?"
+        # Red herring reveal — reads from the correct per-suspect field
+        rh_suspect = _find_red_herring_suspect(case)
+        if rh_suspect:
             st.markdown(
                 f"<div style='background:#2a1a1a;border-left:4px solid #aa4444;"
                 f"padding:10px 14px;border-radius:4px;margin:8px 0'>"
-                f"🪤 <strong>Red herring:</strong> The evidence pointing to {rh_name} "
-                f"was a deliberate misdirection. {red_herring.get('description','')}</div>",
+                f"🪤 <strong>Red herring:</strong> {rh_suspect['name']} appeared suspicious "
+                f"because of: <em>{rh_suspect['red_herring_detail']}</em><br>"
+                f"<span style='color:#888;font-size:0.9em'>"
+                f"The real explanation: {rh_suspect['what_they_are_hiding']}</span></div>",
                 unsafe_allow_html=True
             )
 
@@ -133,9 +146,9 @@ def show_reveal():
                         st.markdown(f"**{suspect['name']}** ({len(visits)} visit{'s' if len(visits) > 1 else ''})")
                         for v_num, entry in enumerate(visits, 1):
                             st.markdown(f"*Visit {v_num}*")
-                            st.markdown(f"- Rahim asked: *{entry.get('rahim_question','')}*")
-                            st.markdown(f"- {suspect['name']} replied: *{entry.get('suspect_reply','')}*")
-                            st.markdown(f"- Rahim thought: *{entry.get('rahim_reaction','')}*")
+                            st.markdown(f"- Rahim asked: *{entry.get('rahim_question', '')}*")
+                            st.markdown(f"- {suspect['name']} replied: *{entry.get('suspect_reply', '')}*")
+                            st.markdown(f"- Rahim thought: *{entry.get('rahim_reaction', '')}*")
 
         st.divider()
         if st.button("🔄 New Case", type="primary", use_container_width=True):

@@ -34,6 +34,7 @@ def _get_act() -> int:
         return 2
     return 1
 
+
 def _build_transcripts(case: dict) -> str:
     """Build a readable transcript of all player interrogations so far."""
     parts = []
@@ -46,6 +47,24 @@ def _build_transcripts(case: dict) -> str:
             ]
             parts.append(f"Interrogation of {suspect['name']}:\n" + "\n".join(lines))
     return "\n\n".join(parts) if parts else "No interrogations yet."
+
+
+def _find_red_herring_suspect_name(case: dict) -> str:
+    """
+    Return the name of the red herring suspect (innocent with a red_herring_detail).
+    Uses explicit index comparison to avoid O(n²) .index() calls.
+    Falls back to the first non-killer suspect if none is flagged.
+    """
+    killer_index = case["killer_index"]
+    for i, s in enumerate(case["suspects"]):
+        if i != killer_index and s.get("red_herring_detail"):
+            return s["name"]
+    # Fallback: first innocent suspect
+    for i, s in enumerate(case["suspects"]):
+        if i != killer_index:
+            return s["name"]
+    return case["suspects"][0]["name"]
+
 
 # ── Case generation ───────────────────────────────────────────────────────────
 
@@ -65,12 +84,12 @@ def generate_case(client: Groq) -> dict:
             parsed = safe_parse_json(response.choices[0].message.content)
             if parsed:
                 return parsed
-        except Exception:
-            pass
-        if attempt == 2:
-            st.error("Failed to generate a valid case after 3 attempts. Please try again.")
-            st.stop()
+        except Exception as e:
+            if attempt == 2:
+                st.error(f"Failed to generate a valid case after 3 attempts: {e}")
+                st.stop()
     return {}
+
 
 # ── Breaking evidence (act 3 auto-drop) ──────────────────────────────────────
 
@@ -106,6 +125,7 @@ def generate_breaking_evidence(client: Groq) -> dict | None:
     except Exception:
         return None
 
+
 # ── Suspect interrogation ─────────────────────────────────────────────────────
 
 def interrogate_suspect(client: Groq, suspect_index: int, question: str) -> str:
@@ -136,6 +156,7 @@ def interrogate_suspect(client: Groq, suspect_index: int, question: str) -> str:
     except Exception as e:
         return f"[Error reaching suspect: {e}]"
 
+
 # ── Clue extraction ───────────────────────────────────────────────────────────
 
 def extract_clues(client: Groq, suspect_name: str, response_text: str) -> list:
@@ -161,6 +182,7 @@ def extract_clues(client: Groq, suspect_name: str, response_text: str) -> list:
     except Exception:
         return []
 
+
 # ── Inspector Rahim — milestone ───────────────────────────────────────────────
 
 def get_ai_detective_update(client: Groq, turn: int) -> dict | None:
@@ -170,13 +192,7 @@ def get_ai_detective_update(client: Groq, turn: int) -> dict | None:
 
     case = st.session_state.case
     killer_name = case["suspects"][case["killer_index"]]["name"]
-
-    # Find the red herring suspect — the one with a red_herring_detail
-    rh_suspect_name = next(
-        (s["name"] for s in case["suspects"]
-         if s.get("red_herring_detail") and s["name"] != killer_name),
-        case["suspects"][0]["name"]
-    )
+    rh_suspect_name = _find_red_herring_suspect_name(case)
 
     user_content = f"""
 Case: {case['title']}
@@ -202,16 +218,15 @@ Player interrogation transcripts:
             max_tokens=300,
         )
         parsed = safe_parse_json(result.choices[0].message.content)
-        # Track which suspect Rahim accused so his reaction is consistent
         if parsed and parsed.get("accusation"):
             st.session_state.rahim_accused = parsed["accusation"]
-            # Mark that suspect as Rahim-visited
             for i, s in enumerate(case["suspects"]):
                 if s["name"] == parsed["accusation"]:
                     st.session_state.setdefault("rahim_visited_suspects", set()).add(i)
         return parsed
     except Exception:
         return None
+
 
 # ── Inspector Rahim — cadence commentary ─────────────────────────────────────
 
@@ -248,6 +263,7 @@ Player interrogation transcripts:
     except Exception:
         return None
 
+
 # ── Inspector Rahim — parallel interrogation ─────────────────────────────────
 
 def get_rahim_interrogation(client: Groq, suspect_index: int) -> dict | None:
@@ -255,11 +271,8 @@ def get_rahim_interrogation(client: Groq, suspect_index: int) -> dict | None:
     case = st.session_state.case
     suspect = case["suspects"][suspect_index]
     is_killer = (suspect_index == case["killer_index"])
-    rh_suspect_name = next(
-        (s["name"] for s in case["suspects"] if s.get("red_herring_detail") and not
-         (case["suspects"].index(s) == case["killer_index"])),
-        ""
-    )
+    rh_suspect_name = _find_red_herring_suspect_name(case)
+
     focus = (
         "This suspect is your PRIMARY focus — they let slip a detail that makes them look guilty."
         if suspect["name"] == rh_suspect_name
@@ -297,11 +310,11 @@ Player has asked {len(st.session_state.histories[suspect_index]) // 2} questions
             rahim_ints = st.session_state.setdefault("rahim_interrogations", {})
             rahim_ints.setdefault(key, []).append(parsed)
             st.session_state.rahim_interrogations = rahim_ints
-            # Mark this suspect as visited by Rahim
             st.session_state.setdefault("rahim_visited_suspects", set()).add(suspect_index)
         return parsed
     except Exception:
         return None
+
 
 # ── Inspector Rahim — reaction to player accusation ──────────────────────────
 
@@ -333,6 +346,7 @@ def get_rahim_reaction(client: Groq, accused_index: int, player_correct: bool) -
         return parsed.get("message", "") if parsed else ""
     except Exception:
         return ""
+
 
 # ── Deduction validation ──────────────────────────────────────────────────────
 
@@ -373,6 +387,7 @@ def validate_deduction(
     except Exception as e:
         return {"valid": False, "feedback": f"Error: {e}", "strength": "weak"}
 
+
 # ── Suggested questions ───────────────────────────────────────────────────────
 
 def get_suggested_questions(client: Groq, suspect_index: int) -> list[str]:
@@ -412,6 +427,7 @@ def get_suggested_questions(client: Groq, suspect_index: int) -> list[str]:
         return parsed.get("questions", []) if parsed else []
     except Exception:
         return []
+
 
 # ── Cross-examination ─────────────────────────────────────────────────────────
 
@@ -458,6 +474,7 @@ def cross_examine_suspect(client: Groq, suspect_index: int, claim: str) -> dict:
         return parsed or {}
     except Exception as e:
         return {"response": f"[Error: {e}]", "new_clue": ""}
+
 
 # ── Alibi challenge ───────────────────────────────────────────────────────────
 
@@ -507,6 +524,7 @@ def challenge_alibi(client: Groq, suspect_index: int) -> dict:
     except Exception as e:
         return {"response": f"[Error: {e}]", "detail_provided": "", "is_evasive": True}
 
+
 # ── Physical clue investigation ───────────────────────────────────────────────
 
 def investigate_physical_clue(client: Groq, clue_text: str) -> dict:
@@ -520,7 +538,7 @@ def investigate_physical_clue(client: Groq, clue_text: str) -> dict:
                 {"role": "user", "content": (
                     f"Case: {case['title']}\n"
                     f"Setting: {case['setting']}\n"
-                    f"Victims: {case['victim']['name']}\n"
+                    f"Victim: {case['victim']['name']}\n"
                     f"Suspects: {', '.join(s['name'] for s in case['suspects'])}\n\n"
                     f"Physical clue:\n{clue_text}"
                 )}
@@ -539,6 +557,7 @@ def investigate_physical_clue(client: Groq, clue_text: str) -> dict:
         return parsed or {}
     except Exception as e:
         return {"finding": f"[Error: {e}]", "corroborates": False, "points_to_suspect": ""}
+
 
 # ── Witness call ──────────────────────────────────────────────────────────────
 
@@ -568,7 +587,7 @@ def call_witness(client: Groq, suspect_index: int) -> dict:
         parsed = safe_parse_json(result.choices[0].message.content)
         if parsed:
             st.session_state.setdefault("clues", []).append({
-                "text": f"[Witness: {parsed.get('witness_name','')}] {parsed.get('new_clue','')}",
+                "text": f"[Witness: {parsed.get('witness_name', '')}] {parsed.get('new_clue', '')}",
                 "type": "witness",
                 "links_to_suspect": parsed.get("suspect_name", suspect["name"]),
                 "source": "witness",
@@ -576,5 +595,10 @@ def call_witness(client: Groq, suspect_index: int) -> dict:
             st.session_state.witness_used = True
         return parsed or {}
     except Exception as e:
-        return {"witness_name": "Unknown", "witness_statement": f"[Error: {e}]",
-                "confirms_alibi": True, "suspect_name": suspect["name"], "new_clue": ""}
+        return {
+            "witness_name": "Unknown",
+            "witness_statement": f"[Error: {e}]",
+            "confirms_alibi": True,
+            "suspect_name": suspect["name"],
+            "new_clue": "",
+        }
